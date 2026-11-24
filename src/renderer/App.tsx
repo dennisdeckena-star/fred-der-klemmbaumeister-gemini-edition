@@ -9,12 +9,9 @@ import {
 } from './three/offscreenSnapshotRenderer';
 import { FredGeminiClient } from '../core/ai/geminiClient';
 import { FredUiAction, resolveFredAgentTurn } from '../core/ai/fredAgentActions';
-import {
-  buildApprovedFredPlan,
-  FredConceptDraft,
-  isRefinementRequest,
-  prepareFredConceptPreview,
-} from '../core/ai/fredPipeline';
+import { isRefinementRequest } from '../core/ai/fredPipeline';
+import { FredAgentHarness, HarnessConceptDraft } from '../core/agent/fredHarness';
+import { GoogleImagePlugin } from '../core/plugins/googleImagePlugin';
 import { buildProBuilderSystemPrompt } from '../../plugins/fred-pro-builder/scripts/snot_engineering_rules';
 import { buildTitanic3000Model } from '../core/models/titanicModel';
 import { buildCustomModelFromPrompt, buildGorchFockModel } from '../core/models/customModelBuilder';
@@ -77,8 +74,15 @@ export function App(): React.ReactElement {
   const [geminiClient, setGeminiClient] = useState<FredGeminiClient>(
     () => new FredGeminiClient({ useOfflineAdapter: true }),
   );
+  const [imagePlugin, setImagePlugin] = useState<GoogleImagePlugin>(
+    () => new GoogleImagePlugin({ useOfflineAdapter: true }),
+  );
   const [conceptStudio, setConceptStudio] = useState<ConceptStudioService>(
     () => new ConceptStudioService({ useOfflineAdapter: true }),
+  );
+  const agentHarness = useMemo(
+    () => new FredAgentHarness({ geminiClient, imagePlugin }),
+    [geminiClient, imagePlugin],
   );
 
   // First-Run API-Key Check via Electron safeStorage IPC
@@ -99,6 +103,7 @@ export function App(): React.ReactElement {
         const key = await api.loadApiKey();
         if (key) {
           setGeminiClient(new FredGeminiClient({ apiKey: key, useOfflineAdapter: false }));
+          setImagePlugin(new GoogleImagePlugin({ apiKey: key, useOfflineAdapter: false }));
           setConceptStudio(new ConceptStudioService({ apiKey: key, useOfflineAdapter: false }));
         }
       }
@@ -124,7 +129,8 @@ export function App(): React.ReactElement {
   ]);
   const [sending, setSending] = useState(false);
   const [pendingFollowUp, setPendingFollowUp] = useState<FredUiAction | null>(null);
-  const [pendingConceptDraft, setPendingConceptDraft] = useState<FredConceptDraft | null>(null);
+  const [pendingConceptDraft, setPendingConceptDraft] = useState<HarnessConceptDraft | null>(null);
+  const [lastConceptDraft, setLastConceptDraft] = useState<HarnessConceptDraft | null>(null);
   const [lastConceptPrompt, setLastConceptPrompt] = useState<string | null>(null);
   const [awaitingRefinement, setAwaitingRefinement] = useState(false);
 
@@ -317,17 +323,18 @@ export function App(): React.ReactElement {
         setLastConceptPrompt(effectivePrompt);
         setAwaitingRefinement(false);
 
-        const draft = await prepareFredConceptPreview(effectivePrompt, {
-          geminiClient,
-          conceptService: conceptStudio,
+        const draft = await agentHarness.prepareConcept(effectivePrompt, {
           referenceImageDataUrl,
-          onStageUpdate: (_stage, friendlyMessage) => {
+          previousDraft: wantsRefinement ? lastConceptDraft : null,
+          refinementNote: wantsRefinement ? text : undefined,
+          onProgress: (_state, friendlyMessage) => {
             setMessages((prev) =>
               prev.map((m) => (m.id === fredId ? { ...m, text: friendlyMessage } : m)),
             );
           },
         });
 
+        setLastConceptDraft(draft);
         setPendingConceptDraft(draft);
         setMessages((prev) =>
           prev.map((m) =>
@@ -335,8 +342,8 @@ export function App(): React.ReactElement {
               ? {
                   ...m,
                   text: `Ich habe dir die Vorschau für „${draft.brief.title}“ vorbereitet! Klicke im Popup auf den grünen Daumen, wenn es dir gefällt, oder auf den roten Daumen, um es anzupassen.`,
-                  imageUrl: draft.conceptImageUrl,
-                  imageBadge: draft.conceptBadge,
+                  imageUrl: draft.imageUrl,
+                  imageBadge: draft.imageBadge,
                 }
               : m,
           ),
@@ -521,6 +528,12 @@ export function App(): React.ReactElement {
               useOfflineAdapter: false,
             }),
           );
+          setImagePlugin(
+            new GoogleImagePlugin({
+              apiKey,
+              useOfflineAdapter: false,
+            }),
+          );
           setConceptStudio(
             new ConceptStudioService({
               apiKey,
@@ -540,9 +553,10 @@ export function App(): React.ReactElement {
       <ConceptApprovalModal
         isOpen={Boolean(pendingConceptDraft)}
         brief={pendingConceptDraft?.brief ?? null}
-        imageUrl={pendingConceptDraft?.conceptImageUrl}
-        imageBadge={pendingConceptDraft?.conceptBadge}
+        imageUrl={pendingConceptDraft?.imageUrl}
+        imageBadge={pendingConceptDraft?.imageBadge}
         imageErrorNote={pendingConceptDraft?.imageErrorNote}
+        trace={pendingConceptDraft?.trace}
         onReject={() => {
           setPendingConceptDraft(null);
           setAwaitingRefinement(true);
@@ -567,15 +581,14 @@ export function App(): React.ReactElement {
               id: buildMsgId,
               sender: 'fred',
               text: `Daumen hoch erhalten! Ich baue jetzt deinen Bauplan für „${draft.brief.title}“ mit allen Werkzeugen…`,
-              imageUrl: draft.conceptImageUrl,
-              imageBadge: draft.conceptBadge ? `Freigegeben • ${draft.conceptBadge}` : undefined,
+              imageUrl: draft.imageUrl,
+              imageBadge: draft.imageBadge ? `Freigegeben • ${draft.imageBadge}` : undefined,
             },
           ]);
           try {
-            const result = await buildApprovedFredPlan(draft, {
-              geminiClient,
+            const result = await agentHarness.buildApprovedConcept(draft, {
               renderViews: (modelToRender) => renderMultiAngleReview(modelToRender, 512, 340),
-              onStageUpdate: (_stage, friendlyMessage) => {
+              onProgress: (_state, friendlyMessage) => {
                 setMessages((prev) =>
                   prev.map((m) => (m.id === buildMsgId ? { ...m, text: friendlyMessage } : m)),
                 );
@@ -600,8 +613,8 @@ export function App(): React.ReactElement {
                   ? {
                       ...m,
                       text: result.fredReply,
-                      imageUrl: result.conceptImageUrl,
-                      imageBadge: result.conceptBadge ? `Freigegeben • ${result.conceptBadge}` : undefined,
+                      imageUrl: draft.imageUrl,
+                      imageBadge: draft.imageBadge ? `Freigegeben • ${draft.imageBadge}` : undefined,
                     }
                   : m,
               ),

@@ -31,6 +31,20 @@ export function Header({
           </span>
           <span className="logo-sparkle logo-sparkle-pink">✦</span>
         </div>
+        <span
+          style={{
+            fontSize: '11px',
+            fontWeight: 700,
+            color: '#475569',
+            background: '#e2e8f0',
+            borderRadius: '999px',
+            padding: '2px 8px',
+            marginLeft: '4px',
+          }}
+          title="Installierte Software-Version"
+        >
+          v1.0.3
+        </span>
       </div>
 
       <div className="header-actions">

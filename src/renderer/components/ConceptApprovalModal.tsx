@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { SubjectResearchBrief } from '../../core/ai/geminiClient';
+import { AgentTraceStep } from '../../core/agent/fredHarness';
 
 export interface ConceptApprovalModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ export interface ConceptApprovalModalProps {
   imageUrl?: string;
   imageBadge?: string;
   imageErrorNote?: string;
+  trace?: AgentTraceStep[];
   onApprove: () => void;
   onReject: () => void;
 }
@@ -18,6 +20,7 @@ export function ConceptApprovalModal({
   imageUrl,
   imageBadge,
   imageErrorNote,
+  trace = [],
   onApprove,
   onReject,
 }: ConceptApprovalModalProps): React.ReactElement | null {
@@ -80,6 +83,37 @@ export function ConceptApprovalModal({
             <X size={18} />
           </button>
         </div>
+
+        {trace.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '6px',
+              justifyContent: 'center',
+              marginBottom: '12px',
+            }}
+          >
+            {trace.map((step, idx) => (
+              <span
+                key={`${step.layer}-${idx}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '3px 9px',
+                  borderRadius: '999px',
+                  background:
+                    step.status === 'OK' ? '#dcfce7' : step.status === 'FALLBACK' ? '#fef3c7' : '#fee2e2',
+                  color:
+                    step.status === 'OK' ? '#166534' : step.status === 'FALLBACK' ? '#92400e' : '#991b1b',
+                }}
+                title={`${step.tool}: ${step.detail} (${step.durationMs} ms)`}
+              >
+                {step.status === 'OK' ? '✓' : step.status === 'FALLBACK' ? '•' : '!'} {step.layer}: {step.detail}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div
           style={{

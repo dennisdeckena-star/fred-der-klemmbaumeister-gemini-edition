@@ -1,5 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
 import { CadModel } from '../cad';
+import { GoogleImagePlugin } from '../plugins/googleImagePlugin';
 import {
   buildAirplaneModel,
   buildCastleModel,
@@ -8,7 +8,7 @@ import {
   buildSpaceRoverModel,
 } from '../models/sampleModels';
 
-export const DEFAULT_IMAGEN_MODEL = 'imagen-3.0-generate-002';
+export const DEFAULT_IMAGEN_MODEL = 'gemini-3.1-flash-image';
 
 export type DetailLevel = 'COMPACT' | 'STANDARD' | 'DISPLAY';
 
@@ -226,58 +226,19 @@ export class ConceptStudioService {
       };
     }
 
-    const ai = new GoogleGenAI({ apiKey: this.apiKey });
-    const styledPrompt = `Photorealistic 3/4 isometric studio product photograph of a high-detail adult collector interlocking plastic brick (AFOL MOC, ${detailLevel} detail) model of: ${prompt}. Realistic ABS plastic sheen, visible interlocking bricks, smooth tiles, slopes and fine details, bright studio tabletop, no text, no watermark.`;
-
-    const candidates = await this.discoverAvailableImageModels();
-    let lastErrorMessage = 'Kein Bildmodell für diesen API-Key verfügbar.';
-
-    for (const candidate of candidates) {
-      try {
-        if (candidate.method === 'predict') {
-          const res = await ai.models.generateImages({
-            model: candidate.name,
-            prompt: styledPrompt,
-            config: { numberOfImages: 1, aspectRatio: '16:9' },
-          });
-          const b64 = res.generatedImages?.[0]?.image?.imageBytes;
-          if (b64) {
-            return {
-              imageDataUrl: `data:image/png;base64,${b64}`,
-              metadata: { ...metadata, generatorModel: candidate.name, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
-            };
-          }
-        } else {
-          const res = await ai.models.generateContent({
-            model: candidate.name,
-            contents: styledPrompt,
-            config: { responseModalities: ['IMAGE', 'TEXT'] },
-          });
-          const parts = res.candidates?.[0]?.content?.parts ?? [];
-          for (const p of parts) {
-            const inline = (p as { inlineData?: { mimeType?: string; data?: string } }).inlineData;
-            if (inline?.data) {
-              const mime = inline.mimeType || 'image/png';
-              return {
-                imageDataUrl: `data:${mime};base64,${inline.data}`,
-                metadata: { ...metadata, generatorModel: candidate.name, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
-              };
-            }
-          }
-        }
-      } catch (err) {
-        const raw = err instanceof Error ? err.message : String(err);
-        if (/billing|quota|limit|429|RESOURCE_EXHAUSTED/i.test(raw)) {
-          lastErrorMessage = 'Google Bild-API Kontingent/Billing für diesen Key nicht aktiv.';
-        } else if (/API_KEY_INVALID|401|403|PERMISSION_DENIED/i.test(raw)) {
-          lastErrorMessage = 'API-Key hat keine Berechtigung für die Google Bilderzeugung.';
-        } else {
-          lastErrorMessage = `Modell ${candidate.name} nicht verfügbar.`;
-        }
-      }
-    }
-
-    throw new Error(lastErrorMessage);
+    const plugin = new GoogleImagePlugin({ apiKey: this.apiKey, useOfflineAdapter: false });
+    const result = await plugin.generateBrickConceptImage({
+      prompt,
+      detailLevel,
+    });
+    return {
+      imageDataUrl: result.imageDataUrl,
+      metadata: {
+        ...metadata,
+        generatorModel: result.modelUsed,
+        adapterMode: 'LIVE_GOOGLE_IMAGEN',
+      },
+    };
   }
 
   public async createConcept(
