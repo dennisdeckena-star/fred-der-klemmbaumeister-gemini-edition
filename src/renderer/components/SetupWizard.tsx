@@ -6,11 +6,17 @@ import {
   validateApiKeyFormat,
 } from '../../core/ai/geminiClient';
 import { GoogleImagePlugin, NANO_BANANA_PRIMARY_MODEL } from '../../core/plugins/googleImagePlugin';
+import {
+  FreeImageMcpKeys,
+  loadFreeImageMcpKeys,
+  saveFreeImageMcpKeys,
+} from '../../core/plugins/freeImageMcpPlugins';
 
 export interface SetupWizardProps {
   isOpen: boolean;
   storageBackend: string;
   onSaveKey: (apiKey: string, budgetEur: number, model: string) => Promise<void>;
+  onSaveFreeImageKeys?: (keys: FreeImageMcpKeys) => void;
   onUseCloudProxy: (proxyUrl: string, accessToken: string, model: string) => void;
   onContinueOffline: (budgetEur: number) => void;
   onClose?: () => void;
@@ -20,17 +26,25 @@ export function SetupWizard({
   isOpen,
   storageBackend,
   onSaveKey,
+  onSaveFreeImageKeys,
   onUseCloudProxy,
   onContinueOffline,
   onClose,
 }: SetupWizardProps): React.ReactElement | null {
-  const [modeTab, setModeTab] = useState<'cloud_proxy' | 'gemini_api'>('cloud_proxy');
+  const [modeTab, setModeTab] = useState<'cloud_proxy' | 'gemini_api' | 'free_image_mcp'>('cloud_proxy');
   const [apiKey, setApiKey] = useState('');
   const [budgetEur, setBudgetEur] = useState(5);
   const [model, setModel] = useState(DEFAULT_GEMINI_MODEL);
 
   const [proxyUrl, setProxyUrl] = useState(DEFAULT_CLOUD_PROXY_URL);
   const [proxyToken, setProxyToken] = useState('');
+
+  const initialFreeKeys = loadFreeImageMcpKeys();
+  const [hfToken, setHfToken] = useState(initialFreeKeys.huggingFaceToken ?? '');
+  const [cfAccountId, setCfAccountId] = useState(initialFreeKeys.cloudflareAccountId ?? '');
+  const [cfApiToken, setCfApiToken] = useState(initialFreeKeys.cloudflareApiToken ?? '');
+  const [pollinationsKey, setPollinationsKey] = useState(initialFreeKeys.pollinationsApiKey ?? '');
+  const [freeSavedMsg, setFreeSavedMsg] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -115,11 +129,116 @@ export function SetupWizard({
             }}
           >
             <KeyRound size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
-            Eigener Google Gemini API-Key (Free-Tier & Pro)
+            Google Gemini & Nano Banana
+          </button>
+          <button
+            type="button"
+            className={`chip-btn ${modeTab === 'free_image_mcp' ? 'active' : ''}`}
+            onClick={() => {
+              setModeTab('free_image_mcp');
+              setError(null);
+              setFreeSavedMsg(null);
+            }}
+          >
+            <Sparkles size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
+            Kostenlose Bild-MCP (FLUX)
           </button>
         </div>
 
-        {modeTab === 'cloud_proxy' ? (
+        {modeTab === 'free_image_mcp' ? (
+          <div className="wizard-form">
+            <div className="wizard-steps">
+              <h3>Feste MCP-Auswahlreihenfolge für Vorschaubilder</h3>
+              <ol>
+                <li><strong>Priorität 1:</strong> Google Nano Banana (wenn Gemini-Key + Billing aktiv)</li>
+                <li><strong>Priorität 2:</strong> Hugging Face FLUX MCP (<code>FLUX.1-schnell</code> / <code>dev</code>, kostenloses HF-Konto)</li>
+                <li><strong>Priorität 3:</strong> Cloudflare Workers AI FLUX MCP (10.000 Neurons/Tag kostenlos)</li>
+                <li><strong>Priorität 4:</strong> Pollinations.ai FLUX MCP (kostenloser <code>sk_</code>-Key)</li>
+              </ol>
+            </div>
+
+            <label className="field-label">
+              <span>Priorität 2 – Hugging Face Token (kostenlos auf huggingface.co/settings/tokens)</span>
+              <input
+                type="password"
+                value={hfToken}
+                onChange={(e) => setHfToken(e.target.value)}
+                placeholder="hf_..."
+                autoComplete="off"
+                className="text-input"
+              />
+            </label>
+
+            <div className="wizard-grid">
+              <label className="field-label">
+                <span>Priorität 3 – Cloudflare Account ID</span>
+                <input
+                  type="text"
+                  value={cfAccountId}
+                  onChange={(e) => setCfAccountId(e.target.value)}
+                  placeholder="Optional"
+                  className="text-input"
+                />
+              </label>
+              <label className="field-label">
+                <span>Priorität 3 – Cloudflare API Token</span>
+                <input
+                  type="password"
+                  value={cfApiToken}
+                  onChange={(e) => setCfApiToken(e.target.value)}
+                  placeholder="Optional"
+                  autoComplete="off"
+                  className="text-input"
+                />
+              </label>
+            </div>
+
+            <label className="field-label">
+              <span>Priorität 4 – Pollinations API-Key (kostenlos auf enter.pollinations.ai)</span>
+              <input
+                type="password"
+                value={pollinationsKey}
+                onChange={(e) => setPollinationsKey(e.target.value)}
+                placeholder="sk_... (Optional)"
+                autoComplete="off"
+                className="text-input"
+              />
+            </label>
+
+            {freeSavedMsg && (
+              <p style={{ color: '#15803d', fontWeight: 700, fontSize: '13px', margin: '4px 0' }}>
+                {freeSavedMsg}
+              </p>
+            )}
+
+            <div className="wizard-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => onClose?.()}
+              >
+                Schließen
+              </button>
+              <button
+                type="button"
+                className="btn-primary-green"
+                onClick={() => {
+                  const nextKeys: FreeImageMcpKeys = {
+                    huggingFaceToken: hfToken.trim() || undefined,
+                    cloudflareAccountId: cfAccountId.trim() || undefined,
+                    cloudflareApiToken: cfApiToken.trim() || undefined,
+                    pollinationsApiKey: pollinationsKey.trim() || undefined,
+                  };
+                  saveFreeImageMcpKeys(nextKeys);
+                  onSaveFreeImageKeys?.(nextKeys);
+                  setFreeSavedMsg('Kostenlose Bild-MCP-Server gespeichert & in Prioritätskette aktiviert!');
+                }}
+              >
+                <CheckCircle2 size={16} /> Kostenlose Bild-MCP aktivieren
+              </button>
+            </div>
+          </div>
+        ) : modeTab === 'cloud_proxy' ? (
           <div className="wizard-form">
             <div className="wizard-steps">
               <h3>Sofort startklar für Endnutzer – ohne eigenes Google AI Studio</h3>

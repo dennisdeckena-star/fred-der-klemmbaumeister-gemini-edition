@@ -1,6 +1,7 @@
 import { CadModel, validateConnections } from '../cad';
 import { FredGeminiClient, SubjectResearchBrief, VisionCritiqueResult } from '../ai/geminiClient';
 import { GoogleImagePlugin } from '../plugins/googleImagePlugin';
+import { ImageMcpPriorityRouter } from '../plugins/freeImageMcpPlugins';
 import {
   BuilderAdjustment,
   buildBrandenburgGateModel,
@@ -9,6 +10,7 @@ import {
 } from '../models/customModelBuilder';
 import { buildNeuschwansteinModel } from '../cad/blueprintCompiler';
 import { buildTitanic3000Model } from '../models/titanicModel';
+import { buildU99SubmarineModel } from '../models/u99SubmarineModel';
 import { runValidationCenter } from '../validation/validationCenter';
 import { listAllParts } from '../ldraw';
 import { buildProBuilderSystemPrompt } from '../../../plugins/fred-pro-builder/scripts/snot_engineering_rules';
@@ -73,11 +75,19 @@ export function extractRequestedPartCount(prompt: string): number | null {
 export class FredAgentHarness {
   private readonly geminiClient: FredGeminiClient;
   private readonly imagePlugin: GoogleImagePlugin;
+  private readonly imageRouter: ImageMcpPriorityRouter;
   private state: HarnessState = 'IDLE';
 
-  constructor(options: { geminiClient: FredGeminiClient; imagePlugin: GoogleImagePlugin }) {
+  constructor(options: {
+    geminiClient: FredGeminiClient;
+    imagePlugin: GoogleImagePlugin;
+    imageRouter?: ImageMcpPriorityRouter;
+  }) {
     this.geminiClient = options.geminiClient;
     this.imagePlugin = options.imagePlugin;
+    this.imageRouter =
+      options.imageRouter ??
+      new ImageMcpPriorityRouter({ googleImagePlugin: options.imagePlugin });
   }
 
   public getState(): HarnessState {
@@ -146,26 +156,29 @@ export class FredAgentHarness {
       const t2 = Date.now();
       const partHint = requestedPartCount ? `, approximately ${requestedPartCount} interlocking bricks` : '';
       try {
-        const imgRes = await this.imagePlugin.generateBrickConceptImage({
+        const imgRes = await this.imageRouter.generatePreview({
           prompt: `${brief.title} (${brief.scaleLabel}${partHint}): ${brief.realDimensionsNote} Key features: ${brief.signatureFeatures.join(', ')}.`,
           detailLevel: 'DISPLAY',
           previousImageDataUrl: options.previousDraft?.imageUrl,
           refinementNote: options.refinementNote,
         });
         imageUrl = imgRes.imageDataUrl;
-        imageBadge = `Nano Banana (${imgRes.modelUsed}) • EU AI Act Art. 50`;
+        imageBadge = `${imgRes.providerLabel} (${imgRes.modelUsed}) • EU AI Act Art. 50`;
+        const chainSummary = imgRes.attempts
+          .map((a) => `#${a.priority} ${a.providerId}:${a.status === 'SUCCESS' ? 'OK' : a.status}`)
+          .join(' → ');
         trace.push({
           layer: 'IMAGE_PLUGIN',
-          tool: `nano_banana (${imgRes.modelUsed})`,
-          status: imgRes.adapterMode === 'LIVE_GOOGLE_GEMINI_IMAGE' ? 'OK' : 'FALLBACK',
-          detail: `Nano Banana Vorschau (${imgRes.modelUsed})`,
+          tool: `${imgRes.providerId} (${imgRes.modelUsed})`,
+          status: imgRes.adapterMode === 'OFFLINE_FALLBACK' ? 'FALLBACK' : 'OK',
+          detail: `${imgRes.providerLabel} (${chainSummary})`,
           durationMs: imgRes.durationMs,
         });
       } catch (err) {
-        imageErrorNote = err instanceof Error ? err.message : 'Nano Banana Bild-Werkzeug nicht erreichbar.';
+        imageErrorNote = err instanceof Error ? err.message : 'Bild-MCP-Kette nicht erreichbar.';
         trace.push({
           layer: 'IMAGE_PLUGIN',
-          tool: 'nano_banana.generate_image',
+          tool: 'image_router.generate_preview',
           status: 'FAIL',
           detail: imageErrorNote,
           durationMs: Date.now() - t2,
@@ -211,6 +224,9 @@ export class FredAgentHarness {
 
     const construct = (adjs: BuilderAdjustment[]): CadModel => {
       const lower = `${draft.userPrompt} ${draft.brief.title}`.toLowerCase();
+      if (/u\s*-?\s*99|typ\s*vii|u-?boot|submarine/i.test(lower)) {
+        return buildU99SubmarineModel();
+      }
       if (/neuschwanstein|märchenschloss|maerchenschloss/i.test(lower)) {
         return buildNeuschwansteinModel(draft.requestedPartCount ?? 2500);
       }

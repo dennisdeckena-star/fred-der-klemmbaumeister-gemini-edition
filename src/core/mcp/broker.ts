@@ -40,7 +40,11 @@ function classifyToolPermission(toolName: string): McpPermission {
     toolName === 'bom.generate' ||
     toolName.startsWith('render.') ||
     toolName.startsWith('instructions.') ||
-    toolName.startsWith('nano_banana.')
+    toolName.startsWith('nano_banana.') ||
+    toolName.startsWith('hf_flux.') ||
+    toolName.startsWith('cf_flux.') ||
+    toolName.startsWith('pollinations_flux.') ||
+    toolName.startsWith('image_router.')
   ) {
     return 'READ';
   }

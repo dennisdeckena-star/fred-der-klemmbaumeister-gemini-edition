@@ -12,6 +12,11 @@ import { FredUiAction, resolveFredAgentTurn } from '../core/ai/fredAgentActions'
 import { isRefinementRequest } from '../core/ai/fredPipeline';
 import { FredAgentHarness, HarnessConceptDraft } from '../core/agent/fredHarness';
 import { GoogleImagePlugin } from '../core/plugins/googleImagePlugin';
+import {
+  FreeImageMcpKeys,
+  ImageMcpPriorityRouter,
+  loadFreeImageMcpKeys,
+} from '../core/plugins/freeImageMcpPlugins';
 import { buildProBuilderSystemPrompt } from '../../plugins/fred-pro-builder/scripts/snot_engineering_rules';
 import { buildTitanic3000Model } from '../core/models/titanicModel';
 import { buildCustomModelFromPrompt, buildGorchFockModel } from '../core/models/customModelBuilder';
@@ -90,12 +95,17 @@ export function App(): React.ReactElement {
   const [imagePlugin, setImagePlugin] = useState<GoogleImagePlugin>(
     () => new GoogleImagePlugin({ useOfflineAdapter: true }),
   );
+  const [freeImageKeys, setFreeImageKeys] = useState<FreeImageMcpKeys>(() => loadFreeImageMcpKeys());
   const [conceptStudio, setConceptStudio] = useState<ConceptStudioService>(
     () => new ConceptStudioService({ useOfflineAdapter: true }),
   );
+  const imageRouter = useMemo(
+    () => new ImageMcpPriorityRouter({ googleImagePlugin: imagePlugin, freeKeys: freeImageKeys }),
+    [imagePlugin, freeImageKeys],
+  );
   const agentHarness = useMemo(
-    () => new FredAgentHarness({ geminiClient, imagePlugin }),
-    [geminiClient, imagePlugin],
+    () => new FredAgentHarness({ geminiClient, imagePlugin, imageRouter }),
+    [geminiClient, imagePlugin, imageRouter],
   );
 
   // First-Run API-Key Check via Electron safeStorage IPC
@@ -571,6 +581,10 @@ export function App(): React.ReactElement {
         isOpen={showSetupWizard}
         storageBackend={storageBackend}
         onClose={() => setShowSetupWizard(false)}
+        onSaveFreeImageKeys={(keys) => {
+          setFreeImageKeys(keys);
+          setStatusBanner('Kostenlose Bild-MCP-Server (FLUX) in Prioritätskette aktiviert.');
+        }}
         onUseCloudProxy={(proxyUrl, accessToken, model) => {
           setGeminiClient(
             new FredGeminiClient({

@@ -58,6 +58,18 @@ function BlueprintThumbnail({ icon }: { icon: string }): React.ReactElement {
           <polygon points="88,40 100,22 106,24 98,42" fill="#f8fafc" stroke="#475569" strokeWidth="2" />
         </svg>
       );
+    case 'submarine':
+      return (
+        <svg viewBox="0 0 120 90" className="blueprint-svg">
+          <rect x="16" y="66" width="88" height="7" rx="3" fill="#0f172a" />
+          <path d="M14,56 Q22,42 40,42 L86,42 Q102,42 108,54 Q102,64 86,64 L36,64 Q20,64 14,56 Z" fill="#64748b" stroke="#334155" strokeWidth="2" />
+          <path d="M22,50 L98,50 L94,42 L34,42 Z" fill="#94a3b8" />
+          <path d="M48,42 L52,24 L68,24 L74,42 Z" fill="#94a3b8" stroke="#334155" strokeWidth="2" />
+          <rect x="57" y="12" width="3" height="12" fill="#334155" />
+          <rect x="63" y="15" width="2.5" height="9" fill="#475569" />
+          <rect x="34" y="37" width="10" height="4" rx="1" fill="#1e293b" />
+        </svg>
+      );
     case 'ship':
       return (
         <svg viewBox="0 0 120 90" className="blueprint-svg">

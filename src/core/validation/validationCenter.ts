@@ -163,7 +163,7 @@ export function runValidationCenter(
   model: CadModel,
   options: ValidationOptions = {},
 ): ValidationCenterReport {
-  const maxParts = options.maxParts ?? 5000;
+  const maxParts = options.maxParts ?? 10000;
   const maxOverhangRatio = options.maxOverhangRatio ?? 0.78;
   const checks: ValidationCheckResult[] = [];
 

@@ -1,5 +1,6 @@
 import { CadDocument, CadModel } from '../cad';
 import { buildTitanic3000Model } from './titanicModel';
+import { buildU99SubmarineModel } from './u99SubmarineModel';
 
 /**
  * Phase 1.5 Machbarkeitsprobe:
@@ -198,6 +199,7 @@ export function buildAirplaneModel(): CadModel {
 
 export function getStarterBlueprints(): CadModel[] {
   return [
+    buildU99SubmarineModel(),
     buildPirateShipModel(),
     buildTitanic3000Model(3000),
     buildCastleModel(),
