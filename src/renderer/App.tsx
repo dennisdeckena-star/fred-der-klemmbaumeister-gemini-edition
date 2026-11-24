@@ -37,7 +37,12 @@ function appendFredMemoryNote(note: string): void {
   try {
     const existing =
       localStorage.getItem(MEMORY_MD_STORAGE_KEY) ??
-      '# Fred Memory.md\n- Bevorzuge moderne Technic-Skelette mit glatter Kachel-/Slope-Hülle (keine Klötze).\n';
+      '# Fred Memory.md\n' +
+        '- Bevorzuge moderne Technic-Skelette mit glatter Kachel-/Slope-Hülle (keine Klötze).\n' +
+        '- Ralph-Loop-Regel 1: Doppelt querversetzte Bodenplatten (zOffset=0 + zOffset=1) garantieren 100 % Verbundenheit (connections: PASS).\n' +
+        '- Ralph-Loop-Regel 2: Monoton verjüngte Terrassen & Rümpfe verhindern schwebende Überhänge (overhangs: PASS).\n' +
+        '- Ralph-Loop-Regel 3: Curved Slopes & glatte Fliesen nur auf freie Schultern/Decks setzen (keine Steine auf noppenlose Fliesen).\n' +
+        '- Ralph-Loop-Regel 4: Bei Großmodellen (U-99 1,09 m / Neuschwanstein 512x272x342 mm) echte Innenräume (Thronsaal, Sängersaal) & feine Plattenlagen nutzen.\n';
     const entry = `- [${new Date().toISOString().slice(0, 16)}] ${note}\n`;
     localStorage.setItem(MEMORY_MD_STORAGE_KEY, (existing + entry).slice(-8000));
   } catch {

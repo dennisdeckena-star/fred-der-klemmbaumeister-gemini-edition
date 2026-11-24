@@ -9,6 +9,7 @@ import {
   buildModelFromResearchBrief,
 } from '../models/customModelBuilder';
 import { buildNeuschwansteinModel } from '../cad/blueprintCompiler';
+import { buildNeuschwansteinProModel } from '../models/neuschwansteinProModel';
 import { buildTitanic3000Model } from '../models/titanicModel';
 import { buildU99SubmarineModel } from '../models/u99SubmarineModel';
 import { runValidationCenter } from '../validation/validationCenter';
@@ -228,7 +229,10 @@ export class FredAgentHarness {
         return buildU99SubmarineModel();
       }
       if (/neuschwanstein|märchenschloss|maerchenschloss/i.test(lower)) {
-        return buildNeuschwansteinModel(draft.requestedPartCount ?? 2500);
+        if (draft.requestedPartCount && draft.requestedPartCount < 5000) {
+          return buildNeuschwansteinModel(draft.requestedPartCount);
+        }
+        return buildNeuschwansteinProModel();
       }
       if (/titanic|titanik/i.test(lower)) {
         const count = Math.max(500, Math.min(5000, draft.requestedPartCount ?? 3000));
