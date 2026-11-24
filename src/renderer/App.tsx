@@ -71,7 +71,7 @@ export function App(): React.ReactElement {
   const [geminiClient, setGeminiClient] = useState<FredGeminiClient>(
     () => new FredGeminiClient({ useOfflineAdapter: true }),
   );
-  const [conceptStudio] = useState<ConceptStudioService>(
+  const [conceptStudio, setConceptStudio] = useState<ConceptStudioService>(
     () => new ConceptStudioService({ useOfflineAdapter: true }),
   );
 
@@ -93,6 +93,7 @@ export function App(): React.ReactElement {
         const key = await api.loadApiKey();
         if (key) {
           setGeminiClient(new FredGeminiClient({ apiKey: key, useOfflineAdapter: false }));
+          setConceptStudio(new ConceptStudioService({ apiKey: key, useOfflineAdapter: false }));
         }
       }
     });
@@ -511,6 +512,12 @@ export function App(): React.ReactElement {
               apiKey,
               model,
               maxBudgetEur: budgetEur,
+              useOfflineAdapter: false,
+            }),
+          );
+          setConceptStudio(
+            new ConceptStudioService({
+              apiKey,
               useOfflineAdapter: false,
             }),
           );

@@ -246,6 +246,166 @@ export function buildGorchFockModel(
 }
 
 /**
+ * Konstruiert das Berliner Brandenburger Tor als monumentales Sammlermodell im Sandstein-Verbund:
+ * - Pariser-Platz-Sockel mit schwarzem Display-Rahmen
+ * - 6 dorische Doppelsäulen-Reihen mit 5 echten Durchfahrten (mittlere Durchfahrt breiter)
+ * - 2 seitliche Torhäuser links & rechts
+ * - Gebälk, Fries & gestufte Attika im versetzten Sandstein-Verbund (Tan 19)
+ * - Patinagrüne Quadriga (Sockel, Streitwagen, 4 Pferde & Viktoria)
+ */
+export function buildBrandenburgGateModel(targetParts = 3000): CadModel {
+  const b = new MacroCadBuilder('bbt');
+  const sandstone = 19; // Tan / Sandstein
+  const lightStone = 15; // Helle Gesims-Akzente
+  const plaza = 71; // Lichtgrau Pariser Platz
+  const patina = 2; // Grün/Kupferpatina Quadriga
+
+  // 1. Pariser-Platz-Sockel (48 x 16 Noppen) mit schwarzem Display-Rahmen (Y = 0..16)
+  for (let sz = -8; sz < 8; sz++) {
+    b.fillColoredSpanX(
+      -24,
+      23,
+      sz,
+      0,
+      'plate',
+      (sx) => (sx === -24 || sx === 23 || sz === -8 || sz === 7 ? 0 : plaza),
+      'asm-base',
+      1,
+      sz % 2 === 0,
+    );
+    if (sz === -8 || sz === 7) {
+      b.fillSpanX(-24, 23, sz, 8, 'tile', 0, 'asm-base', 2, false);
+    } else {
+      b.place('3070b.dat', 1, 1, 1, -24, sz, 8, 0, 'asm-base', 2);
+      b.place('3070b.dat', 1, 1, 1, 23, sz, 8, 0, 'asm-base', 2);
+    }
+  }
+
+  // 2. Sechs dorische Doppelsäulen-Reihen (jeweils 2x2 Säulen vorne & hinten + Trennwand -> 5 Durchfahrten!)
+  // X-Positionen der 6 Säulenachsen: mittlere Durchfahrt (-3..+2 = 6 Noppen), äußere je 4 Noppen
+  const colXs = [-16, -10, -4, 3, 9, 15];
+  for (const cx of colXs) {
+    // Basis-Platte jeder Säule
+    for (let sz = -4; sz <= 3; sz++) {
+      b.fillSpanX(cx - 1, cx, sz, 8, 'plate', sandstone, 'asm-columns', 3, false);
+    }
+    // 7 Schichten hohe dorische Säulen (Y = 16..184)
+    for (let layer = 0; layer < 7; layer++) {
+      const y = 16 + layer * 24;
+      // Vordere & hintere 2x2 Säule + schlanke mittlere Pfeilerwand
+      for (const sz of [-4, -3, 2, 3]) {
+        b.place('3004.dat', 2, 1, 3, cx - 1, sz, y, sandstone, 'asm-columns', 4 + Math.floor(layer / 2));
+      }
+      for (let sz = -2; sz <= 1; sz++) {
+        b.place('3005.dat', 1, 1, 3, cx, sz, y, sandstone, 'asm-columns', 4 + Math.floor(layer / 2));
+      }
+    }
+    // Kapitelle oben
+    for (let sz = -4; sz <= 3; sz++) {
+      b.fillSpanX(cx - 1, cx, sz, 184, 'plate', lightStone, 'asm-columns', 8, false);
+    }
+  }
+
+  // 3. Zwei seitliche klassizistische Torhäuser (links: -22..-18, rechts: +17..+21, Y = 8..136)
+  for (const [hx0, hx1] of [[-22, -18], [17, 21]] as const) {
+    for (let sz = -4; sz <= 3; sz++) {
+      b.fillSpanX(hx0, hx1, sz, 8, 'plate', sandstone, 'asm-wings', 9, false);
+    }
+    for (let layer = 0; layer < 5; layer++) {
+      const y = 16 + layer * 24;
+      for (let sz = -4; sz <= 3; sz++) {
+        b.fillColoredSpanX(
+          hx0,
+          hx1,
+          sz,
+          y,
+          'brick',
+          (sx) => {
+            const isOuter = sx === hx0 || sx === hx1 || sz === -4 || sz === 3;
+            if (!isOuter) return null;
+            const isWindow = layer >= 1 && layer <= 3 && sx === Math.floor((hx0 + hx1) / 2);
+            return isWindow ? 272 : sandstone;
+          },
+          'asm-wings',
+          9 + Math.floor(layer / 2),
+          layer % 2 === 1,
+        );
+      }
+    }
+    for (let sz = -4; sz <= 3; sz++) {
+      b.fillSpanX(hx0, hx1, sz, 136, 'plate', lightStone, 'asm-wings', 12, false);
+      b.fillSpanX(hx0, hx1, sz, 144, 'tile', sandstone, 'asm-wings', 12, true);
+    }
+  }
+
+  // 4. Gebälk, Fries & gestufte Attika (Y = 192..280) im echten versetzten Steinverbund
+  for (let sz = -5; sz <= 4; sz++) {
+    b.fillSpanX(-18, 17, sz, 192, 'plate', sandstone, 'asm-attic', 13, sz % 2 === 0);
+  }
+  for (let layer = 0; layer < 2; layer++) {
+    const y = 200 + layer * 24;
+    for (let sz = -5; sz <= 4; sz++) {
+      b.fillColoredSpanX(
+        -18,
+        17,
+        sz,
+        y,
+        'brick',
+        (sx) => {
+          const isOuter = sx === -18 || sx === 17 || sz === -5 || sz === 4;
+          if (!isOuter && sx % 4 !== 0) return null;
+          return layer === 1 && sx % 3 === 0 ? lightStone : sandstone;
+        },
+        'asm-attic',
+        14 + layer,
+        layer % 2 === 1,
+      );
+    }
+  }
+  for (let sz = -5; sz <= 4; sz++) {
+    b.fillSpanX(-18, 17, sz, 248, 'plate', lightStone, 'asm-attic', 16, false);
+    if (sz === -5 || sz === 4) {
+      b.fillSpanX(-18, 17, sz, 256, 'tile', lightStone, 'asm-attic', 16, true);
+    }
+  }
+  // Mittlere Attika-Stufe (Sockel der Quadriga, sx = -8..+7)
+  for (let sz = -3; sz <= 2; sz++) {
+    b.fillSpanX(-8, 7, sz, 256, 'brick', sandstone, 'asm-attic', 17, sz % 2 === 0);
+    b.fillSpanX(-8, 7, sz, 280, 'tile', sandstone, 'asm-attic', 17, true);
+  }
+
+  // 5. Patinagrüne Quadriga (4 Pferde + Streitwagen + Siegesgöttin Viktoria, Y = 288..360)
+  for (let sz = -2; sz <= 1; sz++) {
+    b.fillSpanX(-5, 4, sz, 288, 'plate', patina, 'asm-quadriga', 18, false);
+  }
+  // 4 Pferde nebeneinander nach vorne blickend
+  for (const hx of [-4, -2, 1, 3]) {
+    b.place('3005.dat', 1, 1, 3, hx, -2, 296, patina, 'asm-quadriga', 19);
+    b.place('3005.dat', 1, 1, 3, hx, -1, 296, patina, 'asm-quadriga', 19);
+    b.place('3024.dat', 1, 1, 1, hx, -2, 320, patina, 'asm-quadriga', 19);
+  }
+  // Streitwagen + Siegesgöttin Viktoria mit Stab
+  b.fillSpanX(-2, 1, 1, 296, 'brick', patina, 'asm-quadriga', 20, false);
+  b.place('3004.dat', 2, 1, 3, -1, 1, 320, patina, 'asm-quadriga', 20);
+  b.place('3024.dat', 1, 1, 1, 0, 1, 344, 14, 'asm-quadriga', 20); // Goldener Siegeskranz
+
+  const label = targetParts >= 1000 ? `Brandenburger Tor (${targetParts.toLocaleString('de-DE')} Ziel-Skala)` : 'Brandenburger Tor (Berlin)';
+  return b.toCadModel({
+    id: `model-brandenburg-gate-${targetParts}`,
+    name: label,
+    description:
+      'Monumentales Sammlermodell des Berliner Brandenburger Tors mit 6 dorischen Säulenreihen (5 Durchfahrten), 2 Torhäusern, Sandstein-Attika und patinagrüner Quadriga im 20-LDU-Noppenraster.',
+    assemblies: [
+      { id: 'asm-base', name: '1. Pariser-Platz-Sockel & Rahmen', parentId: null, stepOrder: 1 },
+      { id: 'asm-columns', name: '2. Sechs dorische Säulenreihen (5 Durchfahrten)', parentId: null, stepOrder: 2 },
+      { id: 'asm-wings', name: '3. Zwei seitliche Torhäuser', parentId: null, stepOrder: 3 },
+      { id: 'asm-attic', name: '4. Gebälk, Fries & Attika', parentId: null, stepOrder: 4 },
+      { id: 'asm-quadriga', name: '5. Patinagrüne Quadriga & Viktoria', parentId: null, stepOrder: 5 },
+    ],
+  });
+}
+
+/**
  * Universeller Profi-Builder auf Basis des recherchierten SubjectResearchBrief.
  * Baut echte, verknüpfte 3D-Modelle (Fahrzeug, Architektur, Schiff, Raumfahrt/Custom)
  * im versetzten Steinverbund statt primitiver Klötzchen.
@@ -254,6 +414,9 @@ export function buildModelFromResearchBrief(
   brief: SubjectResearchBrief,
   adjustments: BuilderAdjustment[] = [],
 ): CadModel {
+  if (/brandeb\w*\s*tor|brandenb\w*\s*tor|brandenburgertor/i.test(brief.title)) {
+    return buildBrandenburgGateModel(3000);
+  }
   if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(brief.title)) {
     return buildGorchFockModel(brief.scaleLabel, adjustments);
   }

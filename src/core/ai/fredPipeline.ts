@@ -86,34 +86,42 @@ export async function runFredBuildPipeline(
   onStageUpdate?.('RESEARCH', 'Ich schaue mir gerade die echten Maße, Farben und Details an…');
   const brief = await geminiClient.researchSubject(userPrompt, referenceImageDataUrl);
 
-  // Stufe 2: Zielbild (hochgeladenes Foto, Live-Imagen oder lokales Konzeptbild)
-  onStageUpdate?.('CONCEPT_IMAGE', `Ich erstelle das Vorschaubild für „${brief.title}“…`);
+  // Stufe 2: Zielbild (hochgeladenes Foto, Live Google Imagen / Gemini Image, oder lokales Konzeptbild)
+  onStageUpdate?.('CONCEPT_IMAGE', `Ich erstelle gerade das fotorealistische Klemmbaustein-Vorschaubild für „${brief.title}“…`);
   let conceptImageUrl: string | undefined = referenceImageDataUrl;
   let conceptBadge: string | undefined = referenceImageDataUrl
     ? `Dein Referenzbild • ${brief.title}`
     : undefined;
+  let imageErrorNote: string | undefined;
 
   if (!conceptImageUrl) {
     const lower = userPrompt.toLowerCase();
-    if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(lower)) {
-      conceptImageUrl = './concepts/gorch-fock-concept.png';
-      conceptBadge = `Konzeptvorschau ${brief.title} • EU AI Act Art. 50`;
-    } else if (/titanic|titanik/i.test(lower)) {
-      conceptImageUrl = './concepts/titanic-concept.png';
-      conceptBadge = `Konzeptvorschau ${brief.title} • EU AI Act Art. 50`;
-    } else if (conceptService) {
+    // 1. Always prefer LIVE Google Imagen / Gemini Image when connected!
+    if (conceptService) {
       try {
         const session = await conceptService.createConcept(
-          `${brief.title} (${brief.scaleLabel}): ${brief.signatureFeatures.join(', ')}`,
+          brief.title,
+          `${brief.title} (${brief.scaleLabel}): ${brief.realDimensionsNote} Merkmale: ${brief.signatureFeatures.join(', ')}`,
           'DISPLAY',
         );
         const rev = session.revisions[0];
         if (rev?.imageDataUrl && !rev.imageDataUrl.startsWith('data:image/svg+xml')) {
           conceptImageUrl = rev.imageDataUrl;
-          conceptBadge = `KI-Konzeptvorschau ${brief.title} • EU AI Act Art. 50`;
+          conceptBadge = `KI-Konzeptvorschau (${rev.metadata.generatorModel}) • EU AI Act Art. 50`;
         }
-      } catch {
-        // Graceful continue without blocking 3D build
+      } catch (err) {
+        imageErrorNote = err instanceof Error ? err.message : 'Bild-API nicht erreichbar';
+      }
+    }
+
+    // 2. Fallback to bundled high-res previews if offline
+    if (!conceptImageUrl) {
+      if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(lower)) {
+        conceptImageUrl = './concepts/gorch-fock-concept.png';
+        conceptBadge = `Konzeptvorschau ${brief.title} • EU AI Act Art. 50`;
+      } else if (/titanic|titanik/i.test(lower)) {
+        conceptImageUrl = './concepts/titanic-concept.png';
+        conceptBadge = `Konzeptvorschau ${brief.title} • EU AI Act Art. 50`;
       }
     }
   }
@@ -151,8 +159,12 @@ export async function runFredBuildPipeline(
   // Stufe 6: Abschluss
   onStageUpdate?.('COMPLETE', `Fertig! „${model.name}“ steht bereit.`);
   const sourceNote =
-    brief.sources.length > 0 ? ` (inkl. ${brief.sources.length} recherchierter Quellen)` : '';
-  const fredReply = `Oh, „${model.name}“ – was für ein tolles Projekt! Ich habe dir das Modell (${model.parts.length.toLocaleString('de-DE')} Teile${sourceNote}) im echten Steinverbund direkt im 3D-Studio aufgebaut und auf 0 Kollisionen geprüft. Schreib einfach „ok“, dann starten wir gemeinsam mit Schritt 1!`;
+    brief.sources.length > 0 ? ` (inkl. ${brief.sources.length} recherchierter Web-Quellen)` : '';
+  const imgNote =
+    !conceptImageUrl && imageErrorNote
+      ? ` Hinweis zur Live-Bild-API: ${imageErrorNote}.`
+      : '';
+  const fredReply = `Oh, „${model.name}“ – was für ein großartiges Projekt! Ich habe dir das Modell (${model.parts.length.toLocaleString('de-DE')} Teile${sourceNote}) im echten Steinverbund direkt im 3D-Studio aufgebaut und auf 0 Kollisionen geprüft.${imgNote} Schreib einfach „ok“, dann starten wir gemeinsam mit Schritt 1!`;
 
   return {
     model,

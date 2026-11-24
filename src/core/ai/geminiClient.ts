@@ -302,6 +302,36 @@ export class FredGeminiClient {
     const scaleMatch = prompt.match(/1\s*:\s*(\d{2,4})/);
     const scaleLabel = scaleMatch ? `1:${scaleMatch[1]}` : '1:300';
 
+    if (/brandeb\w*\s*tor|brandenb\w*\s*tor|brandenburgertor/i.test(lower)) {
+      return {
+        title: 'Brandenburger Tor (Berlin)',
+        scaleLabel: scaleMatch ? scaleLabel : '1:200',
+        category: 'architecture',
+        realDimensionsNote:
+          'Original: 65,5 m Breite, 26 m Höhe, 11 m Tiefe; 6 dorische Doppelsäulen (5 Durchfahrten, mittlere breiter), Attika mit bronzener/patinagrüner Quadriga (4 Pferde + Viktoria) und 2 seitliche Torhäuser.',
+        targetStudsLength: 48,
+        targetStudsWidth: 16,
+        targetStudsHeight: 26,
+        primaryColors: [19, 15, 71],
+        accentColors: [2, 10, 72, 0],
+        signatureFeatures: [
+          'Breiter Pariser-Platz-Sockel mit schwarzem Sammlerrahmen',
+          '6 dorische Säulenreihen mit 5 echten Durchfahrten (mittlere Durchfahrt breiter)',
+          '2 seitliche Torhäuser im Sandstein-Mauerverbund',
+          'Mehrstufiges Gebälk & Attika mit patinagrüner Quadriga (Streitwagen + 4 Pferde)',
+        ],
+        assemblies: [
+          '1. Pariser-Platz-Sockel & Fundament',
+          '2. Sechs dorische Säulenreihen & 5 Durchfahrten',
+          '3. Seitliche Torhäuser im Steinverbund',
+          '4. Gebälk, Fries & Attika',
+          '5. Quadriga (Streitwagen & 4 Pferde)',
+        ],
+        sources: [],
+        adapterMode: this.adapterMode,
+      };
+    }
+
     if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(lower)) {
       return {
         title: `Gorch Fock (${scaleLabel})`,
@@ -510,25 +540,33 @@ export class FredGeminiClient {
         const parsedImg = referenceImageDataUrl ? this.parseInlineImage(referenceImageDataUrl) : null;
         if (parsedImg) parts.push({ inlineData: parsedImg });
 
-        const response = await this.ai.models.generateContent({
-          model: this.model,
-          contents: [{ role: 'user', parts }],
-          config: {
-            systemInstruction: researchInstruction,
-            tools: [{ googleSearch: {} }],
-          },
-        });
-        rawText = response.text ?? '';
-        const chunks = (response as unknown as {
-          candidates?: Array<{
-            groundingMetadata?: { groundingChunks?: Array<{ web?: { title?: string; uri?: string } }> };
-          }>;
-        }).candidates?.[0]?.groundingMetadata?.groundingChunks;
-        if (Array.isArray(chunks)) {
-          for (const c of chunks) {
-            if (c.web?.uri) {
-              sources.push({ title: c.web.title ?? c.web.uri, url: c.web.uri });
+        const modelCandidates = Array.from(new Set([this.model, 'gemini-2.5-flash', 'gemini-2.0-flash']));
+        for (const candidateModel of modelCandidates) {
+          try {
+            const response = await this.ai.models.generateContent({
+              model: candidateModel,
+              contents: [{ role: 'user', parts }],
+              config: {
+                systemInstruction: researchInstruction,
+                tools: [{ googleSearch: {} }],
+              },
+            });
+            rawText = response.text ?? '';
+            const chunks = (response as unknown as {
+              candidates?: Array<{
+                groundingMetadata?: { groundingChunks?: Array<{ web?: { title?: string; uri?: string } }> };
+              }>;
+            }).candidates?.[0]?.groundingMetadata?.groundingChunks;
+            if (Array.isArray(chunks)) {
+              for (const c of chunks) {
+                if (c.web?.uri) {
+                  sources.push({ title: c.web.title ?? c.web.uri, url: c.web.uri });
+                }
+              }
             }
+            if (rawText) break;
+          } catch {
+            // Try next Gemini model candidate
           }
         }
       }
@@ -614,11 +652,19 @@ export class FredGeminiClient {
           { text: critiquePrompt },
           ...images.map((img) => ({ inlineData: img })),
         ];
-        const response = await this.ai.models.generateContent({
-          model: this.model,
-          contents: [{ role: 'user', parts }],
-        });
-        rawText = response.text ?? '';
+        const modelCandidates = Array.from(new Set([this.model, 'gemini-2.5-flash', 'gemini-2.0-flash']));
+        for (const candidateModel of modelCandidates) {
+          try {
+            const response = await this.ai.models.generateContent({
+              model: candidateModel,
+              contents: [{ role: 'user', parts }],
+            });
+            rawText = response.text ?? '';
+            if (rawText) break;
+          } catch {
+            // Try next model candidate
+          }
+        }
       }
 
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);

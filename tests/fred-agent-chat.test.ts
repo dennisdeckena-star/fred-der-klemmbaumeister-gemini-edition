@@ -49,4 +49,16 @@ describe('Fred Chat-Agent: Super lieb, motivierend & fängt sofort mit Bild + 3D
     expect(res.action?.type).toBe('BUILD_CUSTOM_MODEL');
     expect(res.replyText).not.toMatch(/API-Setup|Proxy|Gemini-Key/i);
   });
+
+  it('verwechselt „das Brandenburgertor in 3000 teile“ oder „Brandeburger tors“ NIEMALS mit der Starter-Burg', () => {
+    for (const phrase of [
+      'das Brandenburgertor in 3000 teile',
+      'bitte erzeuge mir ein Fotorealistisches vorschaubild des Brandeburger tors',
+    ]) {
+      const res = resolveFredAgentTurn(phrase, baseCtx);
+      expect(res.handledDirectly).toBe(true);
+      expect(res.action?.type).toBe('BUILD_CUSTOM_MODEL');
+      expect(res.action).not.toEqual({ type: 'SELECT_MODEL', modelId: 'model-castle' });
+    }
+  });
 });

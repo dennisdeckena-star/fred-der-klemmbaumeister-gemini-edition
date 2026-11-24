@@ -152,8 +152,12 @@ export function resolveFredAgentTurn(
     };
   }
 
-  // 5. Built-in models
-  if (lower.includes('burg') || lower.includes('schloss')) {
+  // 5. Built-in starter models (STRICT word boundaries so "Brandenburger Tor" NEVER triggers "Burg"!)
+  const wantsCustomScaleOrPreview =
+    /\b(\d{3,5})\s*(teile|steine|bricks?)\b/i.test(lower) ||
+    /vorschaubild|bild|foto|brandenburg|hamburg|augsburg|freiburg|regensburg|wartburg|neuschwanstein|1\s*:\s*\d+/i.test(lower);
+
+  if (!wantsCustomScaleOrPreview && /\b(burg|ritterburg)\b/i.test(lower)) {
     return {
       handledDirectly: true,
       action: { type: 'SELECT_MODEL', modelId: 'model-castle' },
@@ -161,7 +165,7 @@ export function resolveFredAgentTurn(
       replyText: 'Super Wahl! Ich habe dir die Burg direkt ins 3D-Studio gestellt – schreib „ok“ für Schritt 1!',
     };
   }
-  if (lower.includes('rover') || lower.includes('weltraum')) {
+  if (!wantsCustomScaleOrPreview && /\b(rover|weltraum-rover)\b/i.test(lower)) {
     return {
       handledDirectly: true,
       action: { type: 'SELECT_MODEL', modelId: 'model-space-rover' },
@@ -169,7 +173,7 @@ export function resolveFredAgentTurn(
       replyText: 'Klasse Idee! Dein Weltraum-Rover steht schon im 3D-Studio bereit – schreib „ok“ für Schritt 1!',
     };
   }
-  if (lower.includes('flugzeug') || lower.includes('flieger')) {
+  if (!wantsCustomScaleOrPreview && /\b(flugzeug|flieger)\b/i.test(lower)) {
     return {
       handledDirectly: true,
       action: { type: 'SELECT_MODEL', modelId: 'model-airplane' },
@@ -177,7 +181,7 @@ export function resolveFredAgentTurn(
       replyText: 'Auf in die Lüfte! Ich habe das Flugzeug direkt für dich geladen – schreib „ok“ für Schritt 1!',
     };
   }
-  if (lower.includes('pirat') || lower.includes('piratenschiff')) {
+  if (!wantsCustomScaleOrPreview && /\b(piratenschiff)\b/i.test(lower)) {
     return {
       handledDirectly: true,
       action: { type: 'SELECT_MODEL', modelId: 'model-pirate-ship' },

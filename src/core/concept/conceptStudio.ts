@@ -150,22 +150,60 @@ export class ConceptStudioService {
     }
 
     const ai = new GoogleGenAI({ apiKey: this.apiKey });
-    const styledPrompt = `Photorealistic studio product photograph of a colorful interlocking plastic brick model (${detailLevel} detail): ${prompt}. Bright white studio background, glossy ABS plastic reflections, sharp studs, no text.`;
-    const res = await ai.models.generateImages({
-      model: this.imagenModel,
-      prompt: styledPrompt,
-      config: { numberOfImages: 1, aspectRatio: '16:9' },
-    });
+    const styledPrompt = `Photorealistic 3/4 isometric studio product photograph of a detailed adult collector interlocking plastic brick (AFOL MOC, ${detailLevel} detail) model of: ${prompt}. Bright light-grey studio tabletop, glossy ABS plastic reflections, sharp visible studs and smooth tiles, no text, no watermark.`;
 
-    const b64 = res.generatedImages?.[0]?.image?.imageBytes;
-    if (!b64) {
-      throw new Error('Google Imagen lieferte keine Bilddaten zurück.');
+    // 1. Try Imagen models (imagen-3.0-generate-002 -> imagen-4.0-generate-001)
+    const imagenCandidates = Array.from(
+      new Set([this.imagenModel, 'imagen-3.0-generate-002', 'imagen-4.0-generate-001']),
+    );
+    let lastError: unknown = null;
+
+    for (const modelName of imagenCandidates) {
+      try {
+        const res = await ai.models.generateImages({
+          model: modelName,
+          prompt: styledPrompt,
+          config: { numberOfImages: 1, aspectRatio: '16:9' },
+        });
+        const b64 = res.generatedImages?.[0]?.image?.imageBytes;
+        if (b64) {
+          return {
+            imageDataUrl: `data:image/png;base64,${b64}`,
+            metadata: { ...metadata, generatorModel: modelName, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
+          };
+        }
+      } catch (err) {
+        lastError = err;
+      }
     }
 
-    return {
-      imageDataUrl: `data:image/png;base64,${b64}`,
-      metadata,
-    };
+    // 2. Fallback to Gemini Native Image Generation (works with standard Google AI Studio keys!)
+    const geminiImageModels = ['gemini-2.5-flash-image-preview', 'gemini-2.0-flash-exp-image-generation'];
+    for (const modelName of geminiImageModels) {
+      try {
+        const res = await ai.models.generateContent({
+          model: modelName,
+          contents: styledPrompt,
+          config: { responseModalities: ['IMAGE', 'TEXT'] },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        for (const p of parts) {
+          const inline = (p as { inlineData?: { mimeType?: string; data?: string } }).inlineData;
+          if (inline?.data) {
+            const mime = inline.mimeType || 'image/png';
+            return {
+              imageDataUrl: `data:${mime};base64,${inline.data}`,
+              metadata: { ...metadata, generatorModel: modelName, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
+            };
+          }
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    const reason = lastError instanceof Error ? lastError.message : 'Unbekannter API-Fehler';
+    throw new Error(`Google Bilderzeugung fehlgeschlagen: ${reason}`);
   }
 
   public async createConcept(
