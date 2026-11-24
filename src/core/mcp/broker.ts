@@ -39,7 +39,8 @@ function classifyToolPermission(toolName: string): McpPermission {
     toolName === 'model.validate' ||
     toolName === 'bom.generate' ||
     toolName.startsWith('render.') ||
-    toolName.startsWith('instructions.')
+    toolName.startsWith('instructions.') ||
+    toolName.startsWith('nano_banana.')
   ) {
     return 'READ';
   }

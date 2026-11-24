@@ -1,4 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
+import { z } from 'zod';
+import { CadToolDefinition } from '../tools';
+
+export const NANO_BANANA_PRIMARY_MODEL = 'gemini-nano-banana-2.1';
 
 export interface GoogleImagePluginResult {
   imageDataUrl: string;
@@ -15,11 +19,10 @@ export interface GoogleImageRequest {
 }
 
 /**
- * Offizielles Google-Gemini-Bilderzeugungs-Plugin (Schicht 3).
- * Nutzt die moderne Google Gemini / Nano-Banana Image API über `@google/genai`
- * (`ai.models.generateContent` mit `responseModalities: ['TEXT', 'IMAGE']`)
- * statt der abgeschalteten Legacy-Imagen-3/4-Endpunkte.
- * Ermittelt verfügbare Modelle dynamisch per `ModelService.ListModels` (gecacht).
+ * Festes Werkzeug: Google Nano Banana / Gemini Image Plugin (Schicht 3).
+ * Priorisiert fest `gemini-nano-banana-2.1` (mit automatischem Fallback auf
+ * `gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`)
+ * über die offizielle `@google/genai` API (`generateContent` + `responseModalities: ['TEXT', 'IMAGE']`).
  */
 export class GoogleImagePlugin {
   private readonly apiKey?: string;
@@ -42,7 +45,8 @@ export class GoogleImagePlugin {
   }
 
   /**
-   * Fragt einmalig die für diesen API-Key tatsächlich freigeschalteten Gemini-Bildmodelle ab.
+   * Fragt einmalig (gecacht) über ModelService.ListModels ab, welche Nano-Banana- / Gemini-Bildmodelle
+   * für diesen API-Key aktiv sind. Priorität #1 ist immer `gemini-nano-banana-2.1`.
    */
   public async discoverImageModels(fetchImpl: typeof fetch = globalThis.fetch): Promise<string[]> {
     if (this.cachedModels) return this.cachedModels;
@@ -65,17 +69,18 @@ export class GoogleImagePlugin {
           .filter(
             (m) =>
               m.methods.includes('generateContent') &&
-              /(image|nano-banana)/i.test(m.name) &&
+              /(nano-banana|image)/i.test(m.name) &&
               !/^imagen-/i.test(m.name),
           )
           .sort((a, b) => {
             const rank = (n: string) => {
               let s = 0;
-              if (n.includes('3.1-flash-image') && !n.includes('lite')) s += 30;
-              if (n.includes('nano-banana')) s += 28;
-              if (n.includes('3-pro-image')) s += 24;
+              if (n === NANO_BANANA_PRIMARY_MODEL) s += 50;
+              if (n.includes('nano-banana')) s += 40;
+              if (n.includes('3.1-flash-image') && !n.includes('lite')) s += 32;
+              if (n.includes('3-pro-image')) s += 26;
               if (n.includes('3.1-flash-lite-image')) s += 20;
-              if (n.includes('2.5-flash-image')) s += 15;
+              if (n.includes('2.5-flash-image')) s += 14;
               if (n.includes('preview')) s -= 2;
               if (n.includes('exp')) s -= 8;
               return s;
@@ -86,13 +91,13 @@ export class GoogleImagePlugin {
         for (const item of scored) discovered.push(item.name);
       }
     } catch {
-      // Fallback to curated 2026 Gemini image models below
+      // Fall back to curated defaults
     }
 
     const defaults = [
+      NANO_BANANA_PRIMARY_MODEL,
       'gemini-3.1-flash-image',
       'gemini-3.1-flash-image-preview',
-      'gemini-nano-banana-2.1',
       'gemini-3-pro-image',
       'gemini-3-pro-image-preview',
       'gemini-3.1-flash-lite-image',
@@ -104,6 +109,52 @@ export class GoogleImagePlugin {
 
     this.cachedModels = discovered;
     return discovered;
+  }
+
+  /**
+   * 1-Klick-Verbindungstest für das API-Setup: prüft live per ListModels,
+   * ob Nano Banana / Gemini Image für den eingegebenen Key verfügbar ist.
+   */
+  public async testConnection(
+    fetchImpl: typeof fetch = globalThis.fetch,
+  ): Promise<{ ok: boolean; primaryModel: string; detectedModels: string[]; message: string }> {
+    if (!this.apiKey) {
+      return {
+        ok: false,
+        primaryModel: NANO_BANANA_PRIMARY_MODEL,
+        detectedModels: [],
+        message: 'Bitte zuerst einen Google Gemini API-Key eingeben.',
+      };
+    }
+
+    try {
+      const res = await fetchImpl(
+        `https://generativelanguage.googleapis.com/v1beta/models?pageSize=100&key=${encodeURIComponent(this.apiKey)}`,
+      );
+      if (!res.ok) {
+        return {
+          ok: false,
+          primaryModel: NANO_BANANA_PRIMARY_MODEL,
+          detectedModels: [],
+          message: `Google API meldete HTTP ${res.status} (bitte Key prüfen).`,
+        };
+      }
+      this.cachedModels = null;
+      const models = await this.discoverImageModels(fetchImpl);
+      return {
+        ok: true,
+        primaryModel: models[0] ?? NANO_BANANA_PRIMARY_MODEL,
+        detectedModels: models.slice(0, 4),
+        message: `Nano Banana bereit! Primär-Werkzeug: ${models[0] ?? NANO_BANANA_PRIMARY_MODEL}`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        primaryModel: NANO_BANANA_PRIMARY_MODEL,
+        detectedModels: [],
+        message: err instanceof Error ? err.message : 'Verbindungstest fehlgeschlagen.',
+      };
+    }
   }
 
   public async generateBrickConceptImage(
@@ -118,7 +169,7 @@ export class GoogleImagePlugin {
       if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(lower)) {
         return {
           imageDataUrl: './concepts/gorch-fock-concept.png',
-          modelUsed: 'offline-studio-preview',
+          modelUsed: 'nano-banana-offline-preview',
           adapterMode: 'OFFLINE_FALLBACK',
           durationMs: Date.now() - start,
         };
@@ -126,7 +177,7 @@ export class GoogleImagePlugin {
       if (/titanic|titanik/i.test(lower)) {
         return {
           imageDataUrl: './concepts/titanic-concept.png',
-          modelUsed: 'offline-studio-preview',
+          modelUsed: 'nano-banana-offline-preview',
           adapterMode: 'OFFLINE_FALLBACK',
           durationMs: Date.now() - start,
         };
@@ -154,7 +205,7 @@ export class GoogleImagePlugin {
     }
 
     const models = await this.discoverImageModels(fetchImpl);
-    let lastReason = 'Kein aktives Gemini-Bildmodell für diesen API-Key gefunden.';
+    let lastReason = 'Kein aktives Nano-Banana-/Gemini-Bildmodell für diesen API-Key gefunden.';
 
     for (const modelName of models.slice(0, 5)) {
       try {
@@ -182,11 +233,11 @@ export class GoogleImagePlugin {
       } catch (err) {
         const raw = err instanceof Error ? err.message : String(err);
         if (/billing|quota|429|RESOURCE_EXHAUSTED/i.test(raw)) {
-          lastReason = 'Google Gemini Bild-API Kontingent/Billing ist für diesen Key nicht aktiv.';
+          lastReason = 'Google Nano Banana / Bild-API Kontingent oder Billing ist für diesen Key nicht aktiv.';
           break;
         }
         if (/API_KEY_INVALID|401|403|PERMISSION_DENIED/i.test(raw)) {
-          lastReason = 'Der hinterlegte Google-API-Key hat keine Berechtigung für Gemini Image.';
+          lastReason = 'Der hinterlegte Google-API-Key hat keine Berechtigung für Nano Banana.';
           break;
         }
         lastReason = `Modell ${modelName} nicht verfügbar.`;
@@ -195,4 +246,55 @@ export class GoogleImagePlugin {
 
     throw new Error(lastReason);
   }
+}
+
+const GenerateImageSchema = z.object({
+  prompt: z.string().min(2),
+  detailLevel: z.enum(['COMPACT', 'STANDARD', 'DISPLAY']).optional(),
+});
+
+const EditImageSchema = z.object({
+  prompt: z.string().min(2),
+  previousImageDataUrl: z.string().min(10),
+  refinementNote: z.string().min(2),
+  detailLevel: z.enum(['COMPACT', 'STANDARD', 'DISPLAY']).optional(),
+});
+
+/**
+ * Erzeugt die zwei festen Nano-Banana-Werkzeuge für den MCP-Broker & Fred-Agent-Harness:
+ * - `nano_banana.generate_image`
+ * - `nano_banana.edit_image`
+ */
+export function createNanoBananaMcpTools(
+  plugin: GoogleImagePlugin,
+): Map<string, CadToolDefinition<any, any>> {
+  const tools = new Map<string, CadToolDefinition<any, any>>();
+
+  tools.set('nano_banana.generate_image', {
+    name: 'nano_banana.generate_image',
+    description:
+      'Festes Google Nano Banana Bild-Werkzeug (gemini-nano-banana-2.1 / gemini-3.1-flash-image): erzeugt ein fotorealistisches Klemmbaustein-Wunschbild.',
+    inputSchema: GenerateImageSchema,
+    execute: async (args: z.infer<typeof GenerateImageSchema>) =>
+      plugin.generateBrickConceptImage({
+        prompt: args.prompt,
+        detailLevel: args.detailLevel ?? 'DISPLAY',
+      }),
+  });
+
+  tools.set('nano_banana.edit_image', {
+    name: 'nano_banana.edit_image',
+    description:
+      'Festes Google Nano Banana Multi-Turn-Edit-Werkzeug: verfeinert ein bestehendes Klemmbaustein-Vorschaubild nach Nutzer-Feedback (Roter Daumen).',
+    inputSchema: EditImageSchema,
+    execute: async (args: z.infer<typeof EditImageSchema>) =>
+      plugin.generateBrickConceptImage({
+        prompt: args.prompt,
+        previousImageDataUrl: args.previousImageDataUrl,
+        refinementNote: args.refinementNote,
+        detailLevel: args.detailLevel ?? 'DISPLAY',
+      }),
+  });
+
+  return tools;
 }

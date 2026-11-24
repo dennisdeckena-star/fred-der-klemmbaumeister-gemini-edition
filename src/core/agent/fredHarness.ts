@@ -152,19 +152,19 @@ export class FredAgentHarness {
           refinementNote: options.refinementNote,
         });
         imageUrl = imgRes.imageDataUrl;
-        imageBadge = `Google Image Plugin (${imgRes.modelUsed}) • EU AI Act Art. 50`;
+        imageBadge = `Nano Banana (${imgRes.modelUsed}) • EU AI Act Art. 50`;
         trace.push({
           layer: 'IMAGE_PLUGIN',
-          tool: `GoogleImagePlugin (${imgRes.modelUsed})`,
+          tool: `nano_banana (${imgRes.modelUsed})`,
           status: imgRes.adapterMode === 'LIVE_GOOGLE_GEMINI_IMAGE' ? 'OK' : 'FALLBACK',
-          detail: `Fotorealistische Vorschau erzeugt`,
+          detail: `Nano Banana Vorschau (${imgRes.modelUsed})`,
           durationMs: imgRes.durationMs,
         });
       } catch (err) {
-        imageErrorNote = err instanceof Error ? err.message : 'Google Bild-Plugin nicht erreichbar.';
+        imageErrorNote = err instanceof Error ? err.message : 'Nano Banana Bild-Werkzeug nicht erreichbar.';
         trace.push({
           layer: 'IMAGE_PLUGIN',
-          tool: 'GoogleImagePlugin',
+          tool: 'nano_banana.generate_image',
           status: 'FAIL',
           detail: imageErrorNote,
           durationMs: Date.now() - t2,

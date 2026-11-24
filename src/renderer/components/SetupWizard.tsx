@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle2, Cloud, KeyRound, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Cloud, KeyRound, ShieldCheck, Sparkles, X } from 'lucide-react';
 import {
   DEFAULT_CLOUD_PROXY_URL,
   DEFAULT_GEMINI_MODEL,
   validateApiKeyFormat,
 } from '../../core/ai/geminiClient';
+import { GoogleImagePlugin, NANO_BANANA_PRIMARY_MODEL } from '../../core/plugins/googleImagePlugin';
 
 export interface SetupWizardProps {
   isOpen: boolean;
@@ -33,6 +34,25 @@ export function SetupWizard({
 
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [nanoStatus, setNanoStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testingNano, setTestingNano] = useState(false);
+
+  const handleTestNanoBanana = async () => {
+    const check = validateApiKeyFormat(apiKey);
+    if (!check.valid) {
+      setNanoStatus({ ok: false, message: check.reason ?? 'Bitte gültigen Key eingeben.' });
+      return;
+    }
+    setTestingNano(true);
+    setNanoStatus(null);
+    try {
+      const plugin = new GoogleImagePlugin({ apiKey: apiKey.trim(), useOfflineAdapter: false });
+      const res = await plugin.testConnection();
+      setNanoStatus({ ok: res.ok, message: res.message });
+    } finally {
+      setTestingNano(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -219,6 +239,47 @@ export function SetupWizard({
             </div>
 
             {error && <p className="error-text">{error}</p>}
+
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #dbe4ef',
+                borderRadius: '12px',
+                padding: '10px 12px',
+                marginBottom: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '10px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ fontSize: '12.5px', color: '#1e293b' }}>
+                <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Sparkles size={14} color="#eab308" /> Festes Bild-Werkzeug: Nano Banana ({NANO_BANANA_PRIMARY_MODEL})
+                </strong>
+                {nanoStatus && (
+                  <div
+                    style={{
+                      marginTop: '4px',
+                      fontWeight: 600,
+                      color: nanoStatus.ok ? '#15803d' : '#b91c1c',
+                    }}
+                  >
+                    {nanoStatus.message}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleTestNanoBanana}
+                disabled={testingNano || !apiKey.trim()}
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+              >
+                {testingNano ? 'Prüfe...' : 'Nano Banana testen'}
+              </button>
+            </div>
 
             <div className="wizard-security-note">
               <ShieldCheck size={16} />

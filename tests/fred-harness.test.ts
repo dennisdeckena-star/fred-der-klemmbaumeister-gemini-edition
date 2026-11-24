@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { GoogleImagePlugin } from '../src/core/plugins/googleImagePlugin';
+import {
+  createNanoBananaMcpTools,
+  GoogleImagePlugin,
+  NANO_BANANA_PRIMARY_MODEL,
+} from '../src/core/plugins/googleImagePlugin';
+import { FredMcpBroker } from '../src/core/mcp/broker';
 import { extractRequestedPartCount, FredAgentHarness } from '../src/core/agent/fredHarness';
 import { FredGeminiClient } from '../src/core/ai/geminiClient';
 
-describe('Fred 5-Schichten-Agent-Harness & GoogleImagePlugin (BMAD / PIV / Ralph-Loop)', () => {
-  it('erkennt über ListModels moderne Gemini/Nano-Banana-Bildmodelle und ignoriert abgeschaltete Imagen-Modelle', async () => {
+describe('Fred 5-Schichten-Agent-Harness & Nano Banana Werkzeug (BMAD / PIV / Ralph-Loop)', () => {
+  it('priorisiert Nano Banana (gemini-nano-banana-2.1) über ListModels als #1 und ignoriert abgeschaltete Imagen-Modelle', async () => {
     const plugin = new GoogleImagePlugin({ apiKey: 'AIzaSyTestKey12345678901234567890' });
     const mockFetch: typeof fetch = async () =>
       new Response(
@@ -20,9 +25,28 @@ describe('Fred 5-Schichten-Agent-Harness & GoogleImagePlugin (BMAD / PIV / Ralph
       );
 
     const discovered = await plugin.discoverImageModels(mockFetch);
-    expect(discovered[0]).toBe('gemini-3.1-flash-image');
-    expect(discovered).toContain('gemini-nano-banana-2.1');
+    expect(discovered[0]).toBe(NANO_BANANA_PRIMARY_MODEL);
+    expect(discovered).toContain('gemini-3.1-flash-image');
     expect(discovered.some((m) => m.startsWith('imagen-'))).toBe(false);
+  });
+
+  it('registriert nano_banana.generate_image & nano_banana.edit_image fest im MCP-Broker inkl. Audit-Log', async () => {
+    const plugin = new GoogleImagePlugin({ useOfflineAdapter: true });
+    const broker = new FredMcpBroker();
+    broker.registerCadTools(createNanoBananaMcpTools(plugin));
+
+    const names = broker.listTools().map((t) => t.name);
+    expect(names).toContain('nano_banana.generate_image');
+    expect(names).toContain('nano_banana.edit_image');
+
+    const res = await broker.invoke<{ imageDataUrl: string; modelUsed: string }>('nano_banana.generate_image', {
+      prompt: 'Gorch Fock in 1:300',
+      detailLevel: 'DISPLAY',
+    });
+    expect(res.imageDataUrl).toBe('./concepts/gorch-fock-concept.png');
+    expect(broker.getAuditLog().some((a) => a.toolName === 'nano_banana.generate_image' && a.status === 'ALLOWED')).toBe(
+      true,
+    );
   });
 
   it('extrahiert gewünschte Teilezahlen („4000 Teile“) korrekt und ignoriert Maßstäbe („1:300“)', () => {
