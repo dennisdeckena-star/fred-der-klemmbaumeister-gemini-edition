@@ -43,7 +43,7 @@ export function Header({
           }}
           title="Installierte Software-Version"
         >
-          v1.4.0
+          v1.4.1
         </span>
       </div>
 

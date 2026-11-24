@@ -28,6 +28,7 @@ describe('BMAD / PIV / Ralph-Loop: Priorisierte Kostenlose Bild-MCP-Kette & U-99
       'huggingface_flux',
       'cloudflare_flux',
       'pollinations_flux',
+      'hf_public_flux',
     ]);
 
     const googlePlugin = new GoogleImagePlugin({ useOfflineAdapter: true });
@@ -39,6 +40,7 @@ describe('BMAD / PIV / Ralph-Loop: Priorisierte Kostenlose Bild-MCP-Kette & U-99
         cloudflareApiToken: 'cf-tok-1',
         pollinationsApiKey: 'sk_test_pollinations',
       },
+      enablePublicSpace: true,
     });
 
     const broker = new FredMcpBroker();
@@ -50,6 +52,7 @@ describe('BMAD / PIV / Ralph-Loop: Priorisierte Kostenlose Bild-MCP-Kette & U-99
     expect(toolNames).toContain('hf_flux.generate_image');
     expect(toolNames).toContain('cf_flux.generate_image');
     expect(toolNames).toContain('pollinations_flux.generate_image');
+    expect(toolNames).toContain('hf_public_flux.generate_image');
     expect(toolNames).toContain('image_router.generate_preview');
 
     // Fall 1: Nano Banana nicht live -> Priorität 2 (Hugging Face FLUX) gewinnt sofort
@@ -103,6 +106,44 @@ describe('BMAD / PIV / Ralph-Loop: Priorisierte Kostenlose Bild-MCP-Kette & U-99
       'huggingface_flux',
       'cloudflare_flux',
       'pollinations_flux',
+    ]);
+
+    // Fall 4: #1-#4 nicht verfügbar/ohne Key -> Priorität 5 (schlüsselloser FLUX.1-schnell ZeroGPU Space) springt automatisch ein!
+    const keylessRouter = new ImageMcpPriorityRouter({
+      googleImagePlugin: new GoogleImagePlugin({ useOfflineAdapter: true }),
+      freeKeys: {},
+      enablePublicSpace: true,
+    });
+    const resP5 = await keylessRouter.generatePreview(
+      { prompt: 'Brandenburger Tor Berlin Klemmbaustein-Modell' },
+      async (input) => {
+        const url = String(input);
+        if (url.endsWith('/gradio_api/call/infer')) {
+          return new Response(JSON.stringify({ event_id: 'evt-123' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/gradio_api/call/infer/evt-123')) {
+          return new Response(
+            'event: complete\ndata: [{"url": "https://black-forest-labs-flux-1-schnell.hf.space/gradio_api/file=/tmp/test.webp"}]',
+            { status: 200, headers: { 'content-type': 'text/event-stream' } },
+          );
+        }
+        if (url.includes('/tmp/test.webp')) {
+          return makeFakeImageResponse('image/webp');
+        }
+        return new Response('unexpected', { status: 500 });
+      },
+    );
+    expect(resP5.providerId).toBe('hf_public_flux');
+    expect(resP5.imageDataUrl.startsWith('data:image/webp;base64,')).toBe(true);
+    expect(resP5.attempts.map((a) => a.providerId)).toEqual([
+      'nano_banana',
+      'huggingface_flux',
+      'cloudflare_flux',
+      'pollinations_flux',
+      'hf_public_flux',
     ]);
   });
 

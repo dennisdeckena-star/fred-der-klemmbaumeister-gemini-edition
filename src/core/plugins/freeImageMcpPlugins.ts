@@ -6,20 +6,23 @@ export type ImageMcpProviderId =
   | 'nano_banana'
   | 'huggingface_flux'
   | 'cloudflare_flux'
-  | 'pollinations_flux';
+  | 'pollinations_flux'
+  | 'hf_public_flux';
 
 /**
  * Feste, deterministische Auswahl-Reihenfolge der Bild-MCP-Server:
  * 1. Google Nano Banana (höchste Qualität & Multi-Turn-Edit)
- * 2. Hugging Face FLUX MCP (kostenlos mit HF_TOKEN, ZeroGPU / Inference Router)
+ * 2. Hugging Face FLUX MCP (kostenlos mit HF_TOKEN, Inference Router)
  * 3. Cloudflare Workers AI FLUX MCP (kostenloser Free-Tier, 10.000 Neurons/Tag)
  * 4. Pollinations.ai FLUX MCP (kostenlos mit sk_-Key)
+ * 5. Hugging Face Public ZeroGPU FLUX.1-schnell (100 % kostenlos & OHNE API-Key!)
  */
 export const IMAGE_MCP_PRIORITY_ORDER: readonly ImageMcpProviderId[] = [
   'nano_banana',
   'huggingface_flux',
   'cloudflare_flux',
   'pollinations_flux',
+  'hf_public_flux',
 ] as const;
 
 export interface FreeImageMcpKeys {
@@ -286,28 +289,124 @@ export class PollinationsFluxMcpPlugin {
 }
 
 /**
+ * MCP-Server #5 (Immer aktiv im Live-Betrieb – 0 € & OHNE API-Key!):
+ * Offizieller Black Forest Labs FLUX.1-schnell ZeroGPU Space auf Hugging Face.
+ * Nutzt in Electron den CORS-freien Main-Process-IPC-Proxy (`fredApi.generateFreeFluxImage`).
+ */
+export class PublicHfFluxSpaceMcpPlugin {
+  private readonly enabled: boolean;
+  public static readonly SPACE_BASE = 'https://black-forest-labs-flux-1-schnell.hf.space';
+
+  constructor(enabled = true) {
+    this.enabled = enabled;
+  }
+
+  public isConfigured(): boolean {
+    return this.enabled;
+  }
+
+  public async generateImage(
+    req: GoogleImageRequest,
+    fetchImpl: typeof fetch = globalThis.fetch,
+  ): Promise<{ imageDataUrl: string; modelUsed: string; durationMs: number }> {
+    const start = Date.now();
+    if (!this.enabled) {
+      throw new Error('Öffentlicher FLUX.1-schnell Space im Offline-Testmodus deaktiviert.');
+    }
+
+    const prompt = buildBrickFluxPrompt(req);
+
+    // 1. Bevorzugt: CORS-freier Electron Main-Process IPC-Proxy
+    const fredApi = (
+      globalThis as unknown as {
+        window?: {
+          fredApi?: {
+            generateFreeFluxImage?: (
+              p: string,
+            ) => Promise<{ imageDataUrl: string; modelUsed: string }>;
+          };
+        };
+      }
+    ).window?.fredApi;
+
+    if (fredApi?.generateFreeFluxImage) {
+      const res = await fredApi.generateFreeFluxImage(prompt);
+      return {
+        imageDataUrl: res.imageDataUrl,
+        modelUsed: res.modelUsed,
+        durationMs: Date.now() - start,
+      };
+    }
+
+    // 2. Fallback: Direkter Gradio-API-Aufruf (Browser/Node)
+    const postRes = await fetchImpl(`${PublicHfFluxSpaceMcpPlugin.SPACE_BASE}/gradio_api/call/infer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: [prompt, 0, true, 768, 512, 4] }),
+    });
+    if (!postRes.ok) {
+      throw new Error(`Öffentlicher FLUX.1-schnell Space POST HTTP ${postRes.status}.`);
+    }
+    const postJson = (await postRes.json()) as { event_id?: string };
+    if (!postJson.event_id) {
+      throw new Error('Öffentlicher FLUX.1-schnell Space lieferte keine event_id.');
+    }
+
+    const sseRes = await fetchImpl(
+      `${PublicHfFluxSpaceMcpPlugin.SPACE_BASE}/gradio_api/call/infer/${encodeURIComponent(postJson.event_id)}`,
+    );
+    if (!sseRes.ok) {
+      throw new Error(`Öffentlicher FLUX.1-schnell Space SSE HTTP ${sseRes.status}.`);
+    }
+    const sseText = await sseRes.text();
+    const urlMatch = sseText.match(/"url"\s*:\s*"(https:\/\/[^"]+)"/);
+    if (!urlMatch?.[1]) {
+      throw new Error('Öffentlicher FLUX.1-schnell Space lieferte keine Bild-URL.');
+    }
+
+    const imgRes = await fetchImpl(urlMatch[1]);
+    if (!imgRes.ok) {
+      throw new Error(`Öffentlicher FLUX.1-schnell Bild-Download HTTP ${imgRes.status}.`);
+    }
+    const { base64, mimeType } = await blobOrBufferToBase64(imgRes);
+    return {
+      imageDataUrl: `data:${mimeType};base64,${base64}`,
+      modelUsed: 'black-forest-labs/FLUX.1-schnell (ZeroGPU)',
+      durationMs: Date.now() - start,
+    };
+  }
+}
+
+/**
  * Zentraler Bild-MCP-Priority-Router:
  * Prüft alle MCP-Bildserver streng in deterministischer Prioritätsreihenfolge:
  *   1. nano_banana (Google Gemini Image)
- *   2. huggingface_flux (Hugging Face FLUX.1-schnell / dev)
+ *   2. huggingface_flux (Hugging Face FLUX.1-schnell / dev mit HF_TOKEN)
  *   3. cloudflare_flux (Cloudflare Workers AI FLUX.1-schnell)
  *   4. pollinations_flux (Pollinations.ai FLUX)
+ *   5. hf_public_flux (Öffentlicher FLUX.1-schnell ZeroGPU Space – 0 € & OHNE Key!)
  */
 export class ImageMcpPriorityRouter {
   public readonly nanoBanana: GoogleImagePlugin;
   public readonly huggingFace: HuggingFaceFluxMcpPlugin;
   public readonly cloudflare: CloudflareFluxMcpPlugin;
   public readonly pollinations: PollinationsFluxMcpPlugin;
+  public readonly publicHfFlux: PublicHfFluxSpaceMcpPlugin;
 
   constructor(options: {
     googleImagePlugin?: GoogleImagePlugin;
     freeKeys?: FreeImageMcpKeys;
+    enablePublicSpace?: boolean;
   } = {}) {
     this.nanoBanana = options.googleImagePlugin ?? new GoogleImagePlugin({ useOfflineAdapter: true });
     const keys = options.freeKeys ?? {};
     this.huggingFace = new HuggingFaceFluxMcpPlugin(keys.huggingFaceToken);
     this.cloudflare = new CloudflareFluxMcpPlugin(keys.cloudflareAccountId, keys.cloudflareApiToken);
     this.pollinations = new PollinationsFluxMcpPlugin(keys.pollinationsApiKey);
+    const isBrowserOrElectron = typeof window !== 'undefined';
+    const enablePublic =
+      options.enablePublicSpace !== undefined ? options.enablePublicSpace : isBrowserOrElectron;
+    this.publicHfFlux = new PublicHfFluxSpaceMcpPlugin(enablePublic);
   }
 
   public getConfiguredPriorityChain(): Array<{
@@ -346,6 +445,13 @@ export class ImageMcpPriorityRouter {
         toolName: 'pollinations_flux.generate_image',
         configured: this.pollinations.isConfigured(),
       },
+      {
+        priority: 5,
+        providerId: 'hf_public_flux',
+        label: 'FLUX.1-schnell ZeroGPU MCP (Kostenlos & ohne Key)',
+        toolName: 'hf_public_flux.generate_image',
+        configured: this.publicHfFlux.isConfigured(),
+      },
     ];
   }
 
@@ -370,7 +476,8 @@ export class ImageMcpPriorityRouter {
           const anyFreeLive =
             this.huggingFace.isConfigured() ||
             this.cloudflare.isConfigured() ||
-            this.pollinations.isConfigured();
+            this.pollinations.isConfigured() ||
+            this.publicHfFlux.isConfigured();
           if (!anyFreeLive) {
             try {
               const offlineRes = await this.nanoBanana.generateBrickConceptImage(req, fetchImpl);
@@ -565,18 +672,58 @@ export class ImageMcpPriorityRouter {
             reason: err instanceof Error ? err.message : String(err),
             durationMs: Date.now() - stepStart,
           });
+          continue;
+        }
+      }
+
+      if (providerId === 'hf_public_flux') {
+        const toolName = 'hf_public_flux.generate_image';
+        if (!this.publicHfFlux.isConfigured()) {
+          attempts.push({
+            priority,
+            providerId,
+            toolName,
+            status: 'SKIPPED_NO_KEY',
+            reason: 'Öffentlicher ZeroGPU Space im Offline-Modus deaktiviert.',
+            durationMs: Date.now() - stepStart,
+          });
+          continue;
+        }
+        try {
+          const res = await this.publicHfFlux.generateImage(req, fetchImpl);
+          attempts.push({
+            priority,
+            providerId,
+            toolName,
+            status: 'SUCCESS',
+            durationMs: Date.now() - stepStart,
+          });
+          return {
+            imageDataUrl: res.imageDataUrl,
+            providerId,
+            providerLabel: 'FLUX.1-schnell ZeroGPU MCP (Kostenlos)',
+            modelUsed: res.modelUsed,
+            adapterMode: 'LIVE_FREE_MCP_FLUX',
+            durationMs: Date.now() - totalStart,
+            attempts,
+          };
+        } catch (err) {
+          attempts.push({
+            priority,
+            providerId,
+            toolName,
+            status: 'FAILED',
+            reason: err instanceof Error ? err.message : String(err),
+            durationMs: Date.now() - stepStart,
+          });
         }
       }
     }
 
     const summary = attempts
-      .filter((a) => a.status === 'FAILED')
-      .map((a) => `#${a.priority} ${a.providerId}: ${a.reason}`)
+      .map((a) => `#${a.priority} ${a.providerId} (${a.status}): ${a.reason ?? '-'}`)
       .join(' | ');
-    throw new Error(
-      summary ||
-        'Kein aktiver Bild-MCP-Server konfiguriert. Hinterlege im API-Setup einen kostenlosen Hugging-Face-Token (HF_TOKEN), Cloudflare-Token oder aktiviere Nano Banana Billing.',
-    );
+    throw new Error(summary);
   }
 }
 
@@ -637,6 +784,15 @@ export function createFreeImageMcpTools(
     inputSchema: PromptSchema,
     execute: async (args: z.infer<typeof PromptSchema>) =>
       router.pollinations.generateImage(args, fetchImpl),
+  });
+
+  tools.set('hf_public_flux.generate_image', {
+    name: 'hf_public_flux.generate_image',
+    description:
+      'Schlüsselloser kostenloser Black Forest Labs FLUX.1-schnell ZeroGPU MCP-Server (funktioniert sofort ohne API-Key).',
+    inputSchema: PromptSchema,
+    execute: async (args: z.infer<typeof PromptSchema>) =>
+      router.publicHfFlux.generateImage(args, fetchImpl),
   });
 
   return tools;

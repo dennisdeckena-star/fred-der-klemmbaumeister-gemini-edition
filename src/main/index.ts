@@ -128,6 +128,42 @@ ipcMain.handle('secrets:saveKey', (_evt, apiKey: string) => saveGeminiApiKey(api
 ipcMain.handle('secrets:loadKey', () => loadGeminiApiKey());
 ipcMain.handle('secrets:deleteKey', () => deleteGeminiApiKey());
 
+// CORS-freier Main-Process-Proxy für den kostenlosen schlüssellosen FLUX.1-schnell ZeroGPU Space
+ipcMain.handle('image:generateFreeFlux', async (_evt, prompt: string) => {
+  const spaceBase = 'https://black-forest-labs-flux-1-schnell.hf.space';
+  const postRes = await fetch(`${spaceBase}/gradio_api/call/infer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: [String(prompt), 0, true, 768, 512, 4] }),
+  });
+  if (!postRes.ok) {
+    throw new Error(`FLUX.1-schnell Space POST HTTP ${postRes.status}`);
+  }
+  const postJson = (await postRes.json()) as { event_id?: string };
+  if (!postJson.event_id) {
+    throw new Error('FLUX.1-schnell Space lieferte keine event_id.');
+  }
+  const sseRes = await fetch(`${spaceBase}/gradio_api/call/infer/${encodeURIComponent(postJson.event_id)}`);
+  if (!sseRes.ok) {
+    throw new Error(`FLUX.1-schnell Space SSE HTTP ${sseRes.status}`);
+  }
+  const sseText = await sseRes.text();
+  const urlMatch = sseText.match(/"url"\s*:\s*"(https:\/\/[^"]+)"/);
+  if (!urlMatch?.[1]) {
+    throw new Error('FLUX.1-schnell Space lieferte keine Bild-URL (ZeroGPU-Limit erreicht).');
+  }
+  const imgRes = await fetch(urlMatch[1]);
+  if (!imgRes.ok) {
+    throw new Error(`FLUX.1-schnell Bild-Download HTTP ${imgRes.status}`);
+  }
+  const mime = imgRes.headers.get('content-type')?.split(';')[0]?.trim() || 'image/webp';
+  const buf = Buffer.from(await imgRes.arrayBuffer());
+  return {
+    imageDataUrl: `data:${mime};base64,${buf.toString('base64')}`,
+    modelUsed: 'black-forest-labs/FLUX.1-schnell (ZeroGPU)',
+  };
+});
+
 app.whenReady().then(() => {
   buildAppMenu();
   createMainWindow();

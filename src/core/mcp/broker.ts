@@ -42,6 +42,7 @@ function classifyToolPermission(toolName: string): McpPermission {
     toolName.startsWith('instructions.') ||
     toolName.startsWith('nano_banana.') ||
     toolName.startsWith('hf_flux.') ||
+    toolName.startsWith('hf_public_flux.') ||
     toolName.startsWith('cf_flux.') ||
     toolName.startsWith('pollinations_flux.') ||
     toolName.startsWith('image_router.')
