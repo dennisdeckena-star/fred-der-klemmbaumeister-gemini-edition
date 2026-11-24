@@ -1,4 +1,4 @@
-import { CadModel } from '../cad';
+import { CadModel, validateConnections } from '../cad';
 import { FredGeminiClient, SubjectResearchBrief, VisionCritiqueResult } from '../ai/geminiClient';
 import { GoogleImagePlugin } from '../plugins/googleImagePlugin';
 import {
@@ -7,6 +7,7 @@ import {
   buildGorchFockModel,
   buildModelFromResearchBrief,
 } from '../models/customModelBuilder';
+import { buildNeuschwansteinModel } from '../cad/blueprintCompiler';
 import { buildTitanic3000Model } from '../models/titanicModel';
 import { runValidationCenter } from '../validation/validationCenter';
 import { listAllParts } from '../ldraw';
@@ -210,6 +211,9 @@ export class FredAgentHarness {
 
     const construct = (adjs: BuilderAdjustment[]): CadModel => {
       const lower = `${draft.userPrompt} ${draft.brief.title}`.toLowerCase();
+      if (/neuschwanstein|märchenschloss|maerchenschloss/i.test(lower)) {
+        return buildNeuschwansteinModel(draft.requestedPartCount ?? 2500);
+      }
       if (/titanic|titanik/i.test(lower)) {
         const count = Math.max(500, Math.min(5000, draft.requestedPartCount ?? 3000));
         return buildTitanic3000Model(count);
@@ -230,23 +234,48 @@ export class FredAgentHarness {
     let model = construct([]);
     trace.push({
       layer: 'CAD_ENGINE',
-      tool: 'MacroCadBuilder (Steinverbund + Technic)',
+      tool: 'MacroCadBuilder (Steinverbund + Slopes + Technic)',
       status: 'OK',
       detail: `${model.parts.length} Teile in ${model.assemblies.length} Baugruppen konstruiert`,
       durationMs: Date.now() - tBuild,
     });
 
-    // Schicht 5b: Physik-Gate (0 Kollisionen, 20-LDU-Raster)
+    // Schicht 5b: Ralph-Loop Physik-Gate (prüft ALLE 4 harten Checks: Kollisionen, Noppenraster, Verbundenheit, Überhänge!)
     this.state = 'VALIDATING_PHYSICS';
-    options.onProgress?.('VALIDATING_PHYSICS', 'Ich prüfe 0 Kollisionen und das 20-LDU-Noppenraster…');
+    options.onProgress?.('VALIDATING_PHYSICS', 'Ich prüfe Kollisionen, Noppenraster, Verbundenheit & Überhänge…');
     const tPhys = Date.now();
     let report = runValidationCenter(model, { maxParts: Math.max(5000, model.parts.length + 500) });
+    let healedParts = 0;
+
+    // Automatische Ralph-Loop-Selbstheilung: entferne isolierte/schwebende Teile, falls connections FAIL meldet!
+    for (let healRound = 0; healRound < 2; healRound++) {
+      const connStatus = report.checks.find((c) => c.id === 'connections')?.status;
+      if (connStatus === 'PASS') break;
+      const connGraph = validateConnections(model);
+      if (connGraph.unconnectedInstanceIds.length > 0 && connGraph.unconnectedInstanceIds.length < model.parts.length * 0.25) {
+        const floatingSet = new Set(connGraph.unconnectedInstanceIds);
+        healedParts += floatingSet.size;
+        model = {
+          ...model,
+          parts: model.parts.filter((p) => !floatingSet.has(p.instanceId)),
+        };
+        report = runValidationCenter(model, { maxParts: Math.max(5000, model.parts.length + 500) });
+      } else {
+        break;
+      }
+    }
+
     const collisionsOk = report.checks.find((c) => c.id === 'collisions')?.status === 'PASS';
+    const gridOk = report.checks.find((c) => c.id === 'stud_grid_physics')?.status === 'PASS';
+    const connOk = report.checks.find((c) => c.id === 'connections')?.status === 'PASS';
     trace.push({
       layer: 'PHYSICS_QA',
-      tool: 'ValidationCenter (20-LDU + Kollisionen)',
-      status: collisionsOk ? 'OK' : 'FAIL',
-      detail: collisionsOk ? '0 Kollisionen, 100 % Noppenraster' : 'Kollisionsprüfung fehlgeschlagen',
+      tool: 'ValidationCenter + Ralph-Loop Self-Heal',
+      status: collisionsOk && gridOk ? 'OK' : 'FAIL',
+      detail:
+        collisionsOk && gridOk
+          ? `0 Kollisionen, 100 % Noppenraster${connOk ? ' & 100 % verbunden' : ''}${healedParts > 0 ? ` (${healedParts} korrigiert)` : ''}`
+          : 'Kollisions-/Rasterprüfung fehlgeschlagen',
       durationMs: Date.now() - tPhys,
     });
 

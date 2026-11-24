@@ -129,7 +129,16 @@ export function BlueprintSidebar({
                   />
                 </button>
               </div>
-              <BlueprintThumbnail icon={icon} />
+              {typeof m.metadata?.thumbnailUrl === 'string' && m.metadata.thumbnailUrl ? (
+                <img
+                  src={m.metadata.thumbnailUrl}
+                  alt={m.name}
+                  className="blueprint-svg"
+                  style={{ objectFit: 'cover', borderRadius: '10px', height: '78px', width: '100%' }}
+                />
+              ) : (
+                <BlueprintThumbnail icon={icon} />
+              )}
               <div className="blueprint-name">{m.name}</div>
               <div className="blueprint-meta">{m.parts.length} Teile</div>
               {savedPdfs[m.id] && (

@@ -221,6 +221,131 @@ export class MacroCadBuilder {
     }
   }
 
+  /**
+   * Zieht eine vollflächige, QUERVERKNÜPFTE (X + Z!) Verbindungs-Bodenplatte aus 2x8/2x4/2x2-Platten ein,
+   * damit parallele Z-Reihen und Obergeschosse 100 % zu EINEM stabilen Verbund (connections: PASS) verschmelzen!
+   */
+  public addConnectingFloorPlate(
+    sxStart: number,
+    sxEndInclusive: number,
+    szStart: number,
+    szEndInclusive: number,
+    yLdu: number,
+    colorCode: number,
+    assemblyId: string,
+    step: number,
+    zOffset = 0,
+  ): void {
+    // 1. Optional 1xN-Streifen an der Startkante bei zOffset=1, damit die 2xN-Platten Z-Fugen überbrücken!
+    let curZ = szStart;
+    if (zOffset === 1 && curZ <= szEndInclusive) {
+      this.fillSpanX(sxStart, sxEndInclusive, curZ, yLdu, 'plate', colorCode, assemblyId, step, true);
+      curZ += 1;
+    }
+
+    // 2. Hauptfläche aus echten 2x8 (3034.dat), 2x4 (3020.dat) und 2x2 (3022.dat) Platten -> echte X+Z-Querverbindung!
+    const twoWidePlates = [
+      { w: 8, partId: '3034.dat' },
+      { w: 4, partId: '3020.dat' },
+      { w: 2, partId: '3022.dat' },
+    ];
+    while (curZ + 1 <= szEndInclusive) {
+      let x = sxStart;
+      // Optional 2-Noppen-X-Versatz für echten X+Z-Mauerverbund zwischen Plattenlagen!
+      if (zOffset === 1 && sxEndInclusive - sxStart >= 4 && this.canPlace(2, 2, 1, x, curZ, yLdu)) {
+        this.place('3022.dat', 2, 2, 1, x, curZ, yLdu, colorCode, assemblyId, step);
+        x += 2;
+      }
+      while (x <= sxEndInclusive) {
+        const rem = sxEndInclusive - x + 1;
+        let placed = false;
+        for (const opt of twoWidePlates) {
+          if (opt.w <= rem && this.canPlace(opt.w, 2, 1, x, curZ, yLdu)) {
+            this.place(opt.partId, opt.w, 2, 1, x, curZ, yLdu, colorCode, assemblyId, step);
+            x += opt.w;
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          this.place('3024.dat', 1, 1, 1, x, curZ, yLdu, colorCode, assemblyId, step);
+          this.place('3024.dat', 1, 1, 1, x, curZ + 1, yLdu, colorCode, assemblyId, step);
+          x += 1;
+        }
+      }
+      curZ += 2;
+    }
+
+    // 3. Restliche letzte Z-Zeile falls ungerade Breite
+    if (curZ <= szEndInclusive) {
+      this.fillSpanX(sxStart, sxEndInclusive, curZ, yLdu, 'plate', colorCode, assemblyId, step, false);
+    }
+  }
+
+  /**
+   * Baut einen echten runden Schlossturm (2x2 Round Cylinder 3941.dat) mit Spitzdach (3062b.dat).
+   */
+  public addCylindricalTower(
+    sx: number,
+    sz: number,
+    yBase: number,
+    brickLayers: number,
+    wallColor: number,
+    roofColor: number,
+    assemblyId: string,
+    step: number,
+  ): void {
+    for (let i = 0; i < brickLayers; i++) {
+      this.place('3941.dat', 2, 2, 3, sx, sz, yBase + i * 24, wallColor, assemblyId, step + Math.floor(i / 2));
+    }
+    const roofY = yBase + brickLayers * 24;
+    this.place('3022.dat', 2, 2, 1, sx, sz, roofY, roofColor, assemblyId, step + Math.floor(brickLayers / 2) + 1);
+    this.place('3941.dat', 2, 2, 3, sx, sz, roofY + 8, roofColor, assemblyId, step + Math.floor(brickLayers / 2) + 1);
+    this.place('3062b.dat', 1, 1, 3, sx, sz, roofY + 32, roofColor, assemblyId, step + Math.floor(brickLayers / 2) + 2);
+    this.place('3024.dat', 1, 1, 1, sx, sz, roofY + 56, 14, assemblyId, step + Math.floor(brickLayers / 2) + 2); // Goldene Turmspitze
+  }
+
+  /**
+   * Baut ein gestuftes Satteldach mit echten 45°-Slopes (3039.dat / 3040b.dat) und First.
+   */
+  public addSlopedGableRoof(
+    sxStart: number,
+    sxEndInclusive: number,
+    szStart: number,
+    szEndInclusive: number,
+    yBase: number,
+    roofColor: number,
+    assemblyId: string,
+    step: number,
+  ): void {
+    let curZ0 = szStart;
+    let curZ1 = szEndInclusive;
+    let curY = yBase;
+    let tier = 0;
+
+    while (curZ1 - curZ0 >= 2 && tier < 4) {
+      // Vordere & hintere Dachschräge mit echten 2x2-Slopes (3039.dat) & 1x2-Slopes (3040b.dat)
+      for (let sx = sxStart; sx <= sxEndInclusive; sx += 2) {
+        if (sx + 1 <= sxEndInclusive) {
+          this.place('3039.dat', 2, 2, 3, sx, curZ0, curY, roofColor, assemblyId, step + tier);
+          if (curZ1 - 1 > curZ0 + 1) {
+            this.place('3039.dat', 2, 2, 3, sx, curZ1 - 1, curY, roofColor, assemblyId, step + tier);
+          }
+        } else {
+          this.place('3040b.dat', 1, 2, 3, sx, curZ0, curY, roofColor, assemblyId, step + tier);
+        }
+      }
+      // Vollflächiger tragender Dachkern zwischen den Schrägen -> 0 Überhänge & 100 % verbunden!
+      for (let sz = curZ0 + 2; sz <= curZ1 - 2; sz++) {
+        this.fillSpanX(sxStart, sxEndInclusive, sz, curY, 'brick', roofColor, assemblyId, step + tier, sz % 2 === 0);
+      }
+      curZ0 += 1;
+      curZ1 -= 1;
+      curY += 24;
+      tier += 1;
+    }
+  }
+
   public toCadModel(meta: {
     id: string;
     name: string;

@@ -73,4 +73,27 @@ describe('Fred 5-Schichten-Agent-Harness & Nano Banana Werkzeug (BMAD / PIV / Ra
     expect(built.trace.some((t) => t.layer === 'CAD_ENGINE')).toBe(true);
     expect(built.trace.some((t) => t.layer === 'PHYSICS_QA' && t.status === 'OK')).toBe(true);
   });
+
+  it('baut Schloss Neuschwanstein (2500 Teile) mit Slopes, Rundtürmen, SNOT & 100 % Verbundenheit (connections: PASS, overhangs: PASS)', async () => {
+    const { runValidationCenter } = await import('../src/core/validation/validationCenter');
+    const harness = new FredAgentHarness({
+      geminiClient: new FredGeminiClient({ useOfflineAdapter: true }),
+      imagePlugin: new GoogleImagePlugin({ useOfflineAdapter: true }),
+    });
+
+    const draft = await harness.prepareConcept(
+      'Schloss Neuschwanstein als fotorealistisches Sammlermodell in 2500 Teilen Maßstab 1:400',
+    );
+    const built = await harness.buildApprovedConcept(draft);
+    const report = runValidationCenter(built.model, { maxParts: 5000 });
+
+    expect(built.model.name).toBe('Schloss Neuschwanstein (1:400)');
+    expect(built.model.parts.some((p) => p.partId === '3941.dat')).toBe(true); // Runde Ecktürme
+    expect(built.model.parts.some((p) => p.partId === '3039.dat')).toBe(true); // 45°-Slopes Satteldach
+    expect(built.model.parts.some((p) => p.partId === '87087.dat')).toBe(true); // SNOT-Fassade
+    expect(report.checks.find((c) => c.id === 'collisions')?.status).toBe('PASS');
+    expect(report.checks.find((c) => c.id === 'stud_grid_physics')?.status).toBe('PASS');
+    expect(report.checks.find((c) => c.id === 'connections')?.status).toBe('PASS');
+    expect(report.checks.find((c) => c.id === 'overhangs')?.status).toBe('PASS');
+  });
 });

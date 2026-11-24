@@ -1,5 +1,6 @@
 import { CadModel } from '../cad';
 import { MacroCadBuilder } from '../cad/macroBuilder';
+import { buildNeuschwansteinModel, cleanModelTitle } from '../cad/blueprintCompiler';
 import { SubjectResearchBrief, VisionCritiqueResult } from '../ai/geminiClient';
 
 export type BuilderAdjustment = VisionCritiqueResult['recommendedAdjustments'][number];
@@ -414,6 +415,9 @@ export function buildModelFromResearchBrief(
   brief: SubjectResearchBrief,
   adjustments: BuilderAdjustment[] = [],
 ): CadModel {
+  if (/neuschwanstein|märchenschloss|maerchenschloss/i.test(brief.title)) {
+    return buildNeuschwansteinModel(2500);
+  }
   if (/brandeb\w*\s*tor|brandenb\w*\s*tor|brandenburgertor/i.test(brief.title)) {
     return buildBrandenburgGateModel(3000);
   }
@@ -479,25 +483,28 @@ export function buildModelFromResearchBrief(
   }
 
   if (brief.category === 'architecture') {
-    // Architektur-/Turmmodell (z. B. Leuchtturm, Eiffelturm, Villa, Burg)
+    // Architektur-/Turmmodell (z. B. Leuchtturm, Eiffelturm, Villa, Burg) – 100 % verbunden mit Bodenplatten & Slopes!
     const half = 7;
+    b.addConnectingFloorPlate(-half, half - 1, -half, half - 1, 0, 72, 'asm-base', 1);
     for (let sz = -half; sz < half; sz++) {
-      b.fillSpanX(-half, half - 1, sz, 0, 'plate', 72, 'asm-base', 1, sz % 2 === 0);
       if (sz === -half || sz === half - 1) {
         b.fillSpanX(-half, half - 1, sz, 8, 'tile', 0, 'asm-base', 2, false);
       }
     }
-    const floors = adjustments.includes('ADD_EXTERIOR_DETAILS') ? 7 : 6;
+    const floors = adjustments.includes('ADD_EXTERIOR_DETAILS') ? 5 : 4;
+    let curY = 8;
     for (let f = 0; f < floors; f++) {
-      const y = 8 + f * 24;
       const r = Math.max(3, half - 1 - Math.floor(f / 2));
+      // Verbindungsplatte unter jeder zurückspringenden Etage -> garantiert connections: PASS & overhangs: PASS!
+      b.addConnectingFloorPlate(-r, r - 1, -r, r - 1, curY, 71, 'asm-walls', 3 + f * 2);
+      curY += 8;
       const stripeColor = f % 2 === 0 ? primary : secondary;
       for (let sz = -r; sz < r; sz++) {
         b.fillColoredSpanX(
           -r,
           r - 1,
           sz,
-          y,
+          curY,
           'brick',
           (sx) => {
             const isWall = sx === -r || sx === r - 1 || sz === -r || sz === r - 1;
@@ -506,27 +513,24 @@ export function buildModelFromResearchBrief(
             return isWindow ? 272 : stripeColor;
           },
           'asm-walls',
-          3 + f,
+          4 + f * 2,
           f % 2 === 1,
         );
       }
+      curY += 24;
     }
-    // Dach / Laternenkrone
-    const crownY = 8 + floors * 24;
-    for (let sz = -3; sz < 3; sz++) {
-      b.fillSpanX(-3, 2, sz, crownY, 'plate', 0, 'asm-crown', 10, false);
-      b.fillSpanX(-2, 1, sz, crownY + 8, 'brick', 14, 'asm-crown', 11, true);
-      b.fillSpanX(-2, 1, sz, crownY + 32, 'tile', accent, 'asm-crown', 12, false);
-    }
+    // Dachplatte + echtes Slope-Dach
+    b.addConnectingFloorPlate(-3, 2, -3, 2, curY, 0, 'asm-crown', 14);
+    b.addSlopedGableRoof(-3, 2, -3, 2, curY + 8, accent, 'asm-crown', 15);
 
     return b.toCadModel({
       id: `model-custom-${Date.now().toString(36)}`,
-      name: brief.title,
-      description: `${brief.realDimensionsNote} Konstruiert von Fred im versetzten Mauerverbund.`,
+      name: cleanModelTitle(brief.title),
+      description: `${brief.realDimensionsNote} Konstruiert von Fred im voll verbundenen Mauerverbund mit Slopes.`,
       assemblies: [
         { id: 'asm-base', name: '1. Display-Sockel & Fundament', parentId: null, stepOrder: 1 },
         { id: 'asm-walls', name: '2. Mauerverbund & Fassade', parentId: null, stepOrder: 2 },
-        { id: 'asm-crown', name: '3. Gesims, Laterne & Dach', parentId: null, stepOrder: 3 },
+        { id: 'asm-crown', name: '3. Gesims & Slope-Dach', parentId: null, stepOrder: 3 },
       ],
     });
   }

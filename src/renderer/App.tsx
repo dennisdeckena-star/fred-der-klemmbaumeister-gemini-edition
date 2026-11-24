@@ -128,6 +128,14 @@ export function App(): React.ReactElement {
     },
   ]);
   const [sending, setSending] = useState(false);
+  const [chatWidth, setChatWidth] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem('fred_chat_width_px'));
+      return Number.isFinite(saved) && saved >= 280 && saved <= 540 ? saved : 350;
+    } catch {
+      return 350;
+    }
+  });
   const [pendingFollowUp, setPendingFollowUp] = useState<FredUiAction | null>(null);
   const [pendingConceptDraft, setPendingConceptDraft] = useState<HarnessConceptDraft | null>(null);
   const [lastConceptDraft, setLastConceptDraft] = useState<HarnessConceptDraft | null>(null);
@@ -423,7 +431,10 @@ export function App(): React.ReactElement {
         </div>
       )}
 
-      <main className="fred-three-col">
+      <main
+        className="fred-three-col"
+        style={{ ['--chat-width' as string]: `${chatWidth}px` }}
+      >
         <BlueprintSidebar
           models={models}
           activeModelId={activeModel.id}
@@ -446,6 +457,34 @@ export function App(): React.ReactElement {
           onNextStep={() => setCurrentStep(currentStep + 1)}
           onToggleExploded={() => setExploded((v) => !v)}
           onSelectAssembly={setIsolatedAssemblyId}
+        />
+
+        <div
+          className="chat-resizer-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Chat-Breite anpassen"
+          title="Ziehen, um die Breite von Fred's Hilfe anzupassen"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = chatWidth;
+            const onMove = (ev: MouseEvent) => {
+              const next = Math.max(280, Math.min(540, startW + (startX - ev.clientX)));
+              setChatWidth(next);
+              try {
+                localStorage.setItem('fred_chat_width_px', String(Math.round(next)));
+              } catch {
+                // ignore
+              }
+            };
+            const onUp = () => {
+              window.removeEventListener('mousemove', onMove);
+              window.removeEventListener('mouseup', onUp);
+            };
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+          }}
         />
 
         <FredChatPanel
@@ -594,13 +633,19 @@ export function App(): React.ReactElement {
                 );
               },
             });
+            const modelWithThumb: CadModel = draft.imageUrl
+              ? {
+                  ...result.model,
+                  metadata: { ...(result.model.metadata ?? {}), thumbnailUrl: draft.imageUrl },
+                }
+              : result.model;
             setModels((prev) => {
-              const exists = prev.some((m) => m.id === result.model.id);
+              const exists = prev.some((m) => m.id === modelWithThumb.id);
               return exists
-                ? prev.map((m) => (m.id === result.model.id ? result.model : m))
-                : [result.model, ...prev];
+                ? prev.map((m) => (m.id === modelWithThumb.id ? modelWithThumb : m))
+                : [modelWithThumb, ...prev];
             });
-            setActiveModelId(result.model.id);
+            setActiveModelId(modelWithThumb.id);
             setIsolatedAssemblyId(null);
             setExploded(false);
             setPendingFollowUp({ type: 'GO_TO_STEP', step: 1 });
