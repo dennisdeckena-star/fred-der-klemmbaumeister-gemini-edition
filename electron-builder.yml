@@ -1,0 +1,25 @@
+appId: com.fred.gemini-edition
+productName: Fred - Gemini Edition
+copyright: Copyright © 2026 Fred Gemini Edition
+directories:
+  output: release
+  buildResources: assets
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - assets/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/fred-icon.ico
+  artifactName: "Fred - Gemini Edition Setup.exe"
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "Fred - Gemini Edition"
+  uninstallDisplayName: "Fred, der Klemmbaumeister - Gemini Edition"

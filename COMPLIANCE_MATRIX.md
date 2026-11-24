@@ -1,0 +1,14 @@
+# COMPLIANCE MATRIX — EU AI Act (VO (EU) 2024/1689) & DSGVO
+
+**Produkt:** Fred, der Klemmbaumeister – Gemini Edition (v1.0.0)
+**Stand:** 2026-11-23
+
+| Regelwerk / Artikel | Anforderung | Technische & UI-Umsetzung in Fred | Prüfstatus |
+|---------------------|-------------|-----------------------------------|------------|
+| **EU AI Act Art. 50 Abs. 1** | Natürliche Personen müssen klar informiert werden, dass sie mit einem KI-System interagieren. | Dauerhafte sichtbare Kennzeichnung im Chat-Panel (`FredChatPanel.tsx`: „KI-Assistent • Gemini / Offline-Testadapter“) sowie im Setup-Wizard und Inspector-Tab „EU AI Act & DSGVO“. | `PASS` (Code & Test) |
+| **EU AI Act Art. 50 Abs. 2** | Synthetisch erzeugte Bilder müssen in maschinenlesbarem Format als KI-generiert gekennzeichnet und erkennbar sein. | `ConceptStudioService` (`src/core/concept/conceptStudio.ts`) versieht jedes Konzeptbild mit `SyntheticImageMetadata` (`ai_generated: true`, `eu_ai_act_art50: "SYNTHETIC_CONCEPT_PREVIEW"`, `isConceptOnlyNotCadModel: true`, Modell, Zeitstempel) sowie sichtbarem Badge im UI (`ConceptStudioModal.tsx`). | `PASS` (Code & Test) |
+| **EU AI Act Transparenz / Kostenwahrheit** | Endnutzer müssen vor API-Kosten geschützt und klar über getrennte API-Abrechnung informiert werden. | First-Run `SetupWizard.tsx` mit deutlicher Kostenwarnung (API getrennt vom Gemini-Web-Abo), Google-AI-Studio-Anleitung und lokalem Budget-Stopp (`BudgetLimitExceededError`) + Rate-Limit-Schutz. | `PASS` (Code & Test) |
+| **DSGVO Art. 5 (Datenminimierung & Speicherbegrenzung)** | Lokale Datenhaltung ohne Zwang zur Cloud-Speicherung von Nutzerprojekten. | Alle Modelle (`.fred.json`, `.ldr`), RAG-Indizes (SQLite), `Memory.md` und Baufortschritt werden ausschließlich lokal gespeichert. Keine Telemetrie, keine Drittanbieter-Tracker. | `PASS` (Code & Test) |
+| **DSGVO Art. 17 (Recht auf Löschung)** | Nutzer können gespeicherte Daten und Schlüssel vollständig löschen. | `InspectorModal.tsx` („Lokale Daten & API-Key löschen“), `FredMemoryStore.clearAll()`, `LocalRagStore.deleteAll()`, `deleteGeminiApiKey()`. | `PASS` (Code & Test) |
+| **DSGVO Art. 20 (Datenübertragbarkeit)** | Nutzer können ihre Daten in einem strukturierten, maschinenlesbaren Format exportieren. | `InspectorModal.tsx` („Lokale Daten exportieren (JSON)“), `FredMemoryStore.exportBundle()` (Markdown + JSON), LDraw `.ldr` & `.fred.json` Export. | `PASS` (Code & Test) |
+| **DSGVO Art. 32 (Sicherheit der Verarbeitung)** | Schutz vertraulicher Zugangsdaten (API-Key) vor Klartext-Ablage. | Electron `safeStorage` (`src/main/secrets.ts`, Windows DPAPI / Credential Manager), Context Isolation (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`), MCP-Broker-Allowlist ohne Shell-Zugriff. | `PASS` (Code & Test; Windows-DPAPI-Laufzeit auf Win11 `NOT_TESTED` auf Linux-Host) |

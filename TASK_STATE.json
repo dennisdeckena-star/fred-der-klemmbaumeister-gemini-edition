@@ -1,0 +1,188 @@
+{
+  "project": "Fred, der Klemmbaumeister - Gemini Edition",
+  "contractVersion": "FAS V4.3",
+  "updatedAt": "2026-11-23T23:09:00+01:00",
+  "tasks": [
+    {
+      "id": "1.1",
+      "phase": 1,
+      "title": "Electron + React + TypeScript + Vite Grundgerüst & App-Icon",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run build (tsc --noEmit, vite build, esbuild main/preload) PASS",
+        "vitest run tests/smoke.test.ts (2/2) PASS"
+      ]
+    },
+    {
+      "id": "1.2",
+      "phase": 1,
+      "title": "LDraw-Teilebibliothek (.dat Geometrien, Farben, Konnektoren, Bestellstatus)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/ldraw.test.ts (4/4) PASS"
+      ]
+    },
+    {
+      "id": "1.3",
+      "phase": 1,
+      "title": "Three.js 3D-Workspace, PBR-ABS-Shader, Hierarchie, Undo/Redo, Kollision & Verbindungen",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/cad-engine.test.ts (4/4) PASS"
+      ]
+    },
+    {
+      "id": "1.4",
+      "phase": 1,
+      "title": "CAD-Toolschicht (18 geprüfte Tools mit strengem Eingabeschema)",
+      "status": "PASS",
+      "attempts": 2,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/cad-tools.test.ts (18/18 Tools + Zod-Validation) PASS"
+      ]
+    },
+    {
+      "id": "1.5",
+      "phase": 1,
+      "title": "Machbarkeitsprobe: Testmodell (Innenkern + Außenhaut), BOM & mehrseitiges PDF",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/feasibility-probe.test.ts (7-seitiges farbiges PDF + Noppen & Technic-Pins) PASS",
+        "artifacts/feasibility-probe.pdf erzeugt"
+      ]
+    },
+    {
+      "id": "2.1",
+      "phase": 2,
+      "title": "First-Run Setup-Wizard & sichere @google/genai API-Anbindung (gemini-4-argon)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/gemini-client.test.ts (4/4: gemini-4-argon, Streaming, Rate-Limit, Budget-Stopp, Key-Validation) PASS",
+        "src/main/secrets.ts (Electron safeStorage / Windows DPAPI) & src/renderer/components/SetupWizard.tsx implementiert"
+      ]
+    },
+    {
+      "id": "2.2",
+      "phase": 2,
+      "title": "Produktinterner MCP-Broker (Schemas, Berechtigungen, Timeouts, Audit-Log)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/mcp-broker.test.ts (2/2: 18 Tools, DENY Shell, Permission, Timeout, Audit-Log, MCP SDK Server) PASS"
+      ]
+    },
+    {
+      "id": "2.3",
+      "phase": 2,
+      "title": "Konzeptstudio (Titanic-Loop: Bildgenerierung, Iteration, Freigabe-Gate)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/concept-studio.test.ts (Konzeptvorschau, Änderungs-Loop, EU-AI-Act-Metadaten, Freigabe-Gate, deterministischer CAD-Start) PASS"
+      ]
+    },
+    {
+      "id": "2.4",
+      "phase": 2,
+      "title": "Fred-Desktop-UX exakt nach ui-vorlage.png (3-Spalten-Layout)",
+      "status": "PASS",
+      "attempts": 2,
+      "evidence": [
+        "npm run build (tsc --noEmit, vite build ohne Node-External-Warnings, esbuild main/preload) PASS",
+        "Header, BlueprintSidebar, Viewport3D (Three.js ABS PBR + Pfeile + SCHRITT X von Y), FredChatPanel, CornerBricks implementiert"
+      ]
+    },
+    {
+      "id": "3.1",
+      "phase": 3,
+      "title": "Lokales RAG-System (SQLite FTS5 + Embeddings, PDF-Import, Quellenpflicht, Injection-Schutz)",
+      "status": "PASS",
+      "attempts": 2,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/rag.test.ts (2/2: SQLite FTS5 + Embeddings, FlateDecode PDF-Import, Seitenreferenzen, Quellenpflicht, Prompt-Injection-Schutz) PASS"
+      ]
+    },
+    {
+      "id": "3.2",
+      "phase": 3,
+      "title": "Lernfähige Memory (Memory.md + SQLite-Historie, Versionierung, Suche, Export, Undo)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/memory.test.ts (Memory.md-Sync, SQLite-Historie, Versionierung, Suche, Export, Löschung, Undo) PASS"
+      ]
+    },
+    {
+      "id": "3.3",
+      "phase": 3,
+      "title": "Unabhängiges Validierungszentrum (PASS / FAIL / NOT_TESTED)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/validation-center.test.ts (2/2: Teilelimit, Kollisionen, Verbindungen, Überhänge, BOM, Anleitung, physical_load_bearing=NOT_TESTED) PASS"
+      ]
+    },
+    {
+      "id": "4.1",
+      "phase": 4,
+      "title": "Interaktives 3D-Bauanleitungsstudio & deterministischer farbiger PDF-Export",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run build (tsc, vite build, esbuild main/preload inkl. IPC secrets) PASS",
+        "Viewport3D (Schritte, Orbit/Zoom, Baugruppen-Isolation, rote Markierung, Explosionsansicht), InspectorModal, persistenter Baufortschritt & PDF-Export implementiert"
+      ]
+    },
+    {
+      "id": "4.2",
+      "phase": 4,
+      "title": "EU AI Act Art. 50 & DSGVO Compliance (COMPLIANCE_MATRIX.md + UI)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "COMPLIANCE_MATRIX.md erstellt",
+        "vitest run tests/compliance.test.ts PASS"
+      ]
+    },
+    {
+      "id": "4.3",
+      "phase": 4,
+      "title": "Finale Ende-zu-Ende-Abnahme (kompletter Workflow + Persistenz)",
+      "status": "PASS",
+      "attempts": 1,
+      "evidence": [
+        "npm run typecheck PASS",
+        "vitest run tests/e2e-acceptance.test.ts (kompletter Workflow inkl. Speichern/Schließen/Wiederöffnen) PASS",
+        "Gesamt-Testsuite: 13/13 Dateien, 26/26 Tests PASS"
+      ]
+    },
+    {
+      "id": "4.4",
+      "phase": 4,
+      "title": "Windows 11 x64 Release (NSIS Installer, SHA-256, SBOM, Lizenzen, Abschlussbericht)",
+      "status": "BLOCKED",
+      "attempts": 1,
+      "evidence": [
+        "release/win-unpacked/Fred - Gemini Edition.exe (Windows x64 Electron 35.7.5) erfolgreich gebaut",
+        "release/sbom.json (CycloneDX 1.5, 581 Pakete) & release/THIRD_PARTY_LICENSES.md erzeugt",
+        "release/SHA256SUMS.txt erzeugt",
+        "BLOCKER: NSIS-Wrapper (Fred - Gemini Edition Setup.exe) schlug auf Linux-Host mit 'spawn wine ENOENT' fehl; Windows-11-Deinstallationsprüfung auf Linux-Host NOT_TESTED"
+      ]
+    }
+  ]
+}

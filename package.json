@@ -1,0 +1,41 @@
+{
+  "name": "fred-gemini-edition",
+  "version": "1.0.0",
+  "description": "Fred, der Klemmbaumeister – Gemini Edition: Lokale 3D-Klemmbaustein-CAD- und Bauanleitungs-Desktopsoftware mit Google Gemini",
+  "author": "Dennis / Fred Gemini Edition",
+  "license": "MIT",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build:renderer": "vite build",
+    "build:electron": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/main.cjs && esbuild src/main/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
+    "build": "npm run typecheck && npm run build:renderer && npm run build:electron",
+    "test": "vitest run",
+    "start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win nsis --x64"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "lucide-react": "^0.511.0",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "three": "^0.176.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@types/three": "^0.176.0",
+    "@vitejs/plugin-react": "^4.4.1",
+    "electron": "^35.2.1",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.3"
+  }
+}

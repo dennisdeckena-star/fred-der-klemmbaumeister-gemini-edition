@@ -1,0 +1,22 @@
+{
+  "name": "fred-pro-builder",
+  "version": "1.0.0",
+  "description": "Profi-AFOL-Konstruktions-, LDraw-Bibliotheks- und Blender-Cycles-Fotorealismus-Plugin für Fred (Gemini Edition)",
+  "targetAudience": "Adult Klemmbaustein Collectors & MOC Engineers (COBI / BlueBrixx / BrickLink Studio Level)",
+  "capabilities": [
+    "ldraw_complete_library_sync",
+    "blender_cycles_photoreal_render",
+    "snot_and_running_bond_engineering",
+    "external_mcp_bridge"
+  ],
+  "scripts": {
+    "renderCycles": "scripts/render_cycles_ldraw.py",
+    "syncLDrawLibrary": "scripts/sync_ldraw_library.mjs",
+    "engineeringRules": "scripts/snot_engineering_rules.ts"
+  },
+  "compatibleMcpServers": [
+    "musharna/ldraw-mcp",
+    "datakurre/brick-mcp",
+    "ahujasid/blender-mcp"
+  ]
+}

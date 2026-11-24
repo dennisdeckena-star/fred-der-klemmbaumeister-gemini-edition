@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build & Release outputs (werden via GitHub Actions für Releases gebaut)
+dist/
+dist-electron/
+release/
+
+# Logs, caches & Playwright temporary snapshots
+*.log
+npm-debug.log*
+.playwright-mcp/
+artifacts/
+
+# Local secrets & environment files (NIEMALS committen!)
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
