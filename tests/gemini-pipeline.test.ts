@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FredGeminiClient } from '../src/core/ai/geminiClient';
-import { runFredBuildPipeline, PipelineStage } from '../src/core/ai/fredPipeline';
+import { isRefinementRequest, runFredBuildPipeline, PipelineStage } from '../src/core/ai/fredPipeline';
 import { buildGorchFockModel, buildCustomModelFromPrompt } from '../src/core/models/customModelBuilder';
 import { checkStudGridPhysics, runValidationCenter } from '../src/core/validation/validationCenter';
 
@@ -118,5 +118,12 @@ describe('Fred Pro-Pipeline (AP 1–4): Internet-Research, Makro-Steinverbund & 
     expect(result.critique.approved).toBe(true);
     expect(result.conceptImageUrl).toBe('./concepts/gorch-fock-concept.png');
     expect(result.validationReport.checks.find((c) => c.id === 'collisions')?.status).toBe('PASS');
+  });
+
+  it('erkennt Verfeinerungswünsche („optiemiren“, „ne detailierter“) als Änderung am aktuellen Konzept', () => {
+    expect(isRefinementRequest('optiemiren')).toBe(true);
+    expect(isRefinementRequest('ne detailierter')).toBe(true);
+    expect(isRefinementRequest('detailgetreuer mit gleichen Bauteilen')).toBe(true);
+    expect(isRefinementRequest('das Brandenburger Tor in 3000 Teilen')).toBe(false);
   });
 });

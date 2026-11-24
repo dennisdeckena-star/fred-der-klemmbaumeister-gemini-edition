@@ -9,7 +9,12 @@ import {
 } from './three/offscreenSnapshotRenderer';
 import { FredGeminiClient } from '../core/ai/geminiClient';
 import { FredUiAction, resolveFredAgentTurn } from '../core/ai/fredAgentActions';
-import { runFredBuildPipeline } from '../core/ai/fredPipeline';
+import {
+  buildApprovedFredPlan,
+  FredConceptDraft,
+  isRefinementRequest,
+  prepareFredConceptPreview,
+} from '../core/ai/fredPipeline';
 import { buildProBuilderSystemPrompt } from '../../plugins/fred-pro-builder/scripts/snot_engineering_rules';
 import { buildTitanic3000Model } from '../core/models/titanicModel';
 import { buildCustomModelFromPrompt, buildGorchFockModel } from '../core/models/customModelBuilder';
@@ -20,6 +25,7 @@ import { Viewport3D } from './components/Viewport3D';
 import { FredChatPanel, UiChatMessage } from './components/FredChatPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { ConceptStudioModal } from './components/ConceptStudioModal';
+import { ConceptApprovalModal } from './components/ConceptApprovalModal';
 import { InspectorModal } from './components/InspectorModal';
 
 const PROGRESS_STORAGE_KEY = 'fred_gemini_build_progress_v1';
@@ -118,6 +124,9 @@ export function App(): React.ReactElement {
   ]);
   const [sending, setSending] = useState(false);
   const [pendingFollowUp, setPendingFollowUp] = useState<FredUiAction | null>(null);
+  const [pendingConceptDraft, setPendingConceptDraft] = useState<FredConceptDraft | null>(null);
+  const [lastConceptPrompt, setLastConceptPrompt] = useState<string | null>(null);
+  const [awaitingRefinement, setAwaitingRefinement] = useState(false);
 
   const activeModel = useMemo(
     () => models.find((m) => m.id === activeModelId) ?? models[0],
@@ -291,18 +300,27 @@ export function App(): React.ReactElement {
         pendingFollowUp,
       });
 
+      const wantsRefinement =
+        (awaitingRefinement || isRefinementRequest(text)) && Boolean(lastConceptPrompt || activeModel?.name);
+
       const isPipelineBuild =
+        wantsRefinement ||
         Boolean(referenceImageDataUrl) ||
         decision.action?.type === 'BUILD_GORCH_FOCK' ||
         decision.action?.type === 'BUILD_TITANIC' ||
         decision.action?.type === 'BUILD_CUSTOM_MODEL';
 
       if (isPipelineBuild) {
-        const result = await runFredBuildPipeline(text, {
+        const effectivePrompt = wantsRefinement
+          ? `${lastConceptPrompt ?? activeModel.name} — Änderungswunsch: ${text}`
+          : text;
+        setLastConceptPrompt(effectivePrompt);
+        setAwaitingRefinement(false);
+
+        const draft = await prepareFredConceptPreview(effectivePrompt, {
           geminiClient,
           conceptService: conceptStudio,
           referenceImageDataUrl,
-          renderViews: (modelToRender) => renderMultiAngleReview(modelToRender, 512, 340),
           onStageUpdate: (_stage, friendlyMessage) => {
             setMessages((prev) =>
               prev.map((m) => (m.id === fredId ? { ...m, text: friendlyMessage } : m)),
@@ -310,27 +328,15 @@ export function App(): React.ReactElement {
           },
         });
 
-        setModels((prev) => {
-          const exists = prev.some((m) => m.id === result.model.id);
-          return exists
-            ? prev.map((m) => (m.id === result.model.id ? result.model : m))
-            : [result.model, ...prev];
-        });
-        setActiveModelId(result.model.id);
-        setIsolatedAssemblyId(null);
-        setExploded(false);
-        setPendingFollowUp({ type: 'GO_TO_STEP', step: 1 });
-        setStatusBanner(
-          `${result.model.name} (${result.model.parts.length.toLocaleString('de-DE')} Teile, 0 Kollisionen) über die Fred-Pro-Pipeline gebaut & gespeichert.`,
-        );
+        setPendingConceptDraft(draft);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === fredId
               ? {
                   ...m,
-                  text: result.fredReply,
-                  imageUrl: result.conceptImageUrl ?? decision.imageUrl,
-                  imageBadge: result.conceptBadge ?? decision.imageBadge,
+                  text: `Ich habe dir die Vorschau für „${draft.brief.title}“ vorbereitet! Klicke im Popup auf den grünen Daumen, wenn es dir gefällt, oder auf den roten Daumen, um es anzupassen.`,
+                  imageUrl: draft.conceptImageUrl,
+                  imageBadge: draft.conceptBadge,
                 }
               : m,
           ),
@@ -528,6 +534,86 @@ export function App(): React.ReactElement {
           setGeminiClient(new FredGeminiClient({ maxBudgetEur: budgetEur, useOfflineAdapter: true }));
           setShowSetupWizard(false);
           setStatusBanner('Offline-Testadapter aktiv (keine externen API-Kosten).');
+        }}
+      />
+
+      <ConceptApprovalModal
+        isOpen={Boolean(pendingConceptDraft)}
+        brief={pendingConceptDraft?.brief ?? null}
+        imageUrl={pendingConceptDraft?.conceptImageUrl}
+        imageBadge={pendingConceptDraft?.conceptBadge}
+        imageErrorNote={pendingConceptDraft?.imageErrorNote}
+        onReject={() => {
+          setPendingConceptDraft(null);
+          setAwaitingRefinement(true);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `f-rej-${Date.now()}`,
+              sender: 'fred',
+              text: 'Kein Problem! Schreib mir einfach hier in den Chat, was ich am Bild ändern soll (z. B. „detailgetreuer mit gleichen Bauteilen“ oder „andere Farben“) – dann mache ich dir sofort eine neue Vorschau!',
+            },
+          ]);
+        }}
+        onApprove={async () => {
+          const draft = pendingConceptDraft;
+          if (!draft) return;
+          setPendingConceptDraft(null);
+          setSending(true);
+          const buildMsgId = `f-build-${Date.now()}`;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: buildMsgId,
+              sender: 'fred',
+              text: `Daumen hoch erhalten! Ich baue jetzt deinen Bauplan für „${draft.brief.title}“ mit allen Werkzeugen…`,
+              imageUrl: draft.conceptImageUrl,
+              imageBadge: draft.conceptBadge ? `Freigegeben • ${draft.conceptBadge}` : undefined,
+            },
+          ]);
+          try {
+            const result = await buildApprovedFredPlan(draft, {
+              geminiClient,
+              renderViews: (modelToRender) => renderMultiAngleReview(modelToRender, 512, 340),
+              onStageUpdate: (_stage, friendlyMessage) => {
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === buildMsgId ? { ...m, text: friendlyMessage } : m)),
+                );
+              },
+            });
+            setModels((prev) => {
+              const exists = prev.some((m) => m.id === result.model.id);
+              return exists
+                ? prev.map((m) => (m.id === result.model.id ? result.model : m))
+                : [result.model, ...prev];
+            });
+            setActiveModelId(result.model.id);
+            setIsolatedAssemblyId(null);
+            setExploded(false);
+            setPendingFollowUp({ type: 'GO_TO_STEP', step: 1 });
+            setStatusBanner(
+              `${result.model.name} (${result.model.parts.length.toLocaleString('de-DE')} Teile, 0 Kollisionen) freigegeben & gebaut.`,
+            );
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === buildMsgId
+                  ? {
+                      ...m,
+                      text: result.fredReply,
+                      imageUrl: result.conceptImageUrl,
+                      imageBadge: result.conceptBadge ? `Freigegeben • ${result.conceptBadge}` : undefined,
+                    }
+                  : m,
+              ),
+            );
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Fehler beim 3D-Bau';
+            setMessages((prev) =>
+              prev.map((m) => (m.id === buildMsgId ? { ...m, text: `Hinweis: ${msg}` } : m)),
+            );
+          } finally {
+            setSending(false);
+          }
         }}
       />
 

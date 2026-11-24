@@ -463,12 +463,16 @@ body,
 }
 
 .chat-bubble {
-  max-width: 90%;
+  max-width: 92%;
   padding: 11px 14px;
   border-radius: 16px;
   font-size: 13.5px;
-  line-height: 1.42;
+  line-height: 1.44;
   color: #1e293b;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .bubble-fred {

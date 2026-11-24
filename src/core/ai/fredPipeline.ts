@@ -18,6 +18,7 @@ export type ValidationReport = ReturnType<typeof runValidationCenter>;
 export type PipelineStage =
   | 'RESEARCH'
   | 'CONCEPT_IMAGE'
+  | 'AWAITING_APPROVAL'
   | 'CAD_BUILD'
   | 'PHYSICS_CHECK'
   | 'VISION_CRITIQUE'
@@ -32,6 +33,14 @@ export interface FredPipelineOptions {
   maxCritiqueRounds?: number;
 }
 
+export interface FredConceptDraft {
+  userPrompt: string;
+  brief: SubjectResearchBrief;
+  conceptImageUrl?: string;
+  conceptBadge?: string;
+  imageErrorNote?: string;
+}
+
 export interface FredPipelineResult {
   model: CadModel;
   brief: SubjectResearchBrief;
@@ -41,6 +50,18 @@ export interface FredPipelineResult {
   critique: VisionCritiqueResult;
   revisionCount: number;
   fredReply: string;
+}
+
+/**
+ * Erkennt Verfeinerungs-/Korrekturwünsche im Chat (z. B. „optiemiren“, „ne detailierter“, „mehr details“),
+ * damit Fred das AKTUELLE Konzept gezielt verbessert, statt ein Modell namens „optiemiren“ zu erfinden!
+ */
+export function isRefinementRequest(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  if (lower.length > 140) return false;
+  return /^(?:(?:ne|nein|bitte)[,\s]+)?(opti[em]+i?e?r\w*|detail\w*|feiner|schöner|schoener|größer|groesser|kleiner|anders|besser|realistischer|fotorealistischer|mehr\s+details|nochmal|neu\s+machen|änder\w*|aender\w*|anpass\w*|gleiche\s+bauteile)/i.test(
+    lower,
+  );
 }
 
 function buildModelForBrief(
@@ -61,32 +82,18 @@ function buildModelForBrief(
 }
 
 /**
- * Durchgängige 6-Stufen-Meister-Pipeline für Fred, der Klemmbaumeister:
- * 1. Internet- & Referenz-Research (Google Search Grounding / Wissensbasis)
- * 2. Fotorealistisches Zielbild (Nutzer-Upload / Google Imagen / lokales Konzept)
- * 3. Makro-CAD-Konstruktion (Steinverbund, Technic-Kiel, Slopes, Display-Ständer)
- * 4. Deterministisches Physik-Gate (0 Kollisionen, 100 % 20-LDU-Noppenraster)
- * 5. Visuelle Selbstkritik-Loop (3D-Renderings vs. Zielbild via Gemini Vision, max. 2 Runden)
- * 6. Abschluss mit freundlicher Fred-Rückmeldung & BlueBrixx-Bauschritten
+ * Phase A: Schnelle Recherche + fotorealistisches Klemmbaustein-Wunschbild erzeugen.
+ * Das Ergebnis wird dem Nutzer im Bewertungs-Popup (Grüner Daumen / Roter Daumen) gezeigt.
  */
-export async function runFredBuildPipeline(
+export async function prepareFredConceptPreview(
   userPrompt: string,
   options: FredPipelineOptions,
-): Promise<FredPipelineResult> {
-  const {
-    geminiClient,
-    conceptService,
-    referenceImageDataUrl,
-    renderViews,
-    onStageUpdate,
-    maxCritiqueRounds = 2,
-  } = options;
+): Promise<FredConceptDraft> {
+  const { geminiClient, conceptService, referenceImageDataUrl, onStageUpdate } = options;
 
-  // Stufe 1: Internet-Research & Maßstabs-Briefing
   onStageUpdate?.('RESEARCH', 'Ich schaue mir gerade die echten Maße, Farben und Details an…');
   const brief = await geminiClient.researchSubject(userPrompt, referenceImageDataUrl);
 
-  // Stufe 2: Zielbild (hochgeladenes Foto, Live Google Imagen / Gemini Image, oder lokales Konzeptbild)
   onStageUpdate?.('CONCEPT_IMAGE', `Ich erstelle gerade das fotorealistische Klemmbaustein-Vorschaubild für „${brief.title}“…`);
   let conceptImageUrl: string | undefined = referenceImageDataUrl;
   let conceptBadge: string | undefined = referenceImageDataUrl
@@ -96,12 +103,11 @@ export async function runFredBuildPipeline(
 
   if (!conceptImageUrl) {
     const lower = userPrompt.toLowerCase();
-    // 1. Always prefer LIVE Google Imagen / Gemini Image when connected!
     if (conceptService) {
       try {
         const session = await conceptService.createConcept(
           brief.title,
-          `${brief.title} (${brief.scaleLabel}): ${brief.realDimensionsNote} Merkmale: ${brief.signatureFeatures.join(', ')}`,
+          `${brief.title} (${brief.scaleLabel}): ${brief.realDimensionsNote} Merkmale: ${brief.signatureFeatures.join(', ')}. Nutzer-Wunsch: ${userPrompt}`,
           'DISPLAY',
         );
         const rev = session.revisions[0];
@@ -114,7 +120,6 @@ export async function runFredBuildPipeline(
       }
     }
 
-    // 2. Fallback to bundled high-res previews if offline
     if (!conceptImageUrl) {
       if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(lower)) {
         conceptImageUrl = './concepts/gorch-fock-concept.png';
@@ -126,16 +131,36 @@ export async function runFredBuildPipeline(
     }
   }
 
-  // Stufe 3 & 4: Makro-CAD-Bau + Physik-Gate
+  onStageUpdate?.('AWAITING_APPROVAL', `Vorschaubild für „${brief.title}“ ist fertig – bewerte es kurz im Popup!`);
+  return {
+    userPrompt,
+    brief,
+    conceptImageUrl,
+    conceptBadge,
+    imageErrorNote,
+  };
+}
+
+/**
+ * Phase B (erst nach Grünem Daumen im Popup!):
+ * Baut das freigegebene Modell mit allen Werkzeugen (Steinverbund, Physik-Gate,
+ * Multi-Angle-Vision-Selbstkritik, BlueBrixx-Bauschritte).
+ */
+export async function buildApprovedFredPlan(
+  draft: FredConceptDraft,
+  options: FredPipelineOptions,
+): Promise<FredPipelineResult> {
+  const { geminiClient, renderViews, onStageUpdate, maxCritiqueRounds = 2 } = options;
+  const { userPrompt, brief, conceptImageUrl, conceptBadge } = draft;
+
   const appliedAdjustments = new Set<BuilderAdjustment>();
-  onStageUpdate?.('CAD_BUILD', `Ich baue jetzt Skelett, Steinverbund und Details für „${brief.title}“…`);
+  onStageUpdate?.('CAD_BUILD', `Super! Ich baue jetzt Skelett, Steinverbund und Details für „${brief.title}“…`);
   let model = buildModelForBrief(userPrompt, brief, []);
 
   onStageUpdate?.('PHYSICS_CHECK', 'Ich prüfe gerade 0 Kollisionen und das 20-LDU-Noppenraster…');
   let validationReport = runValidationCenter(model, { maxParts: Math.max(3500, model.parts.length + 200) });
 
-  // Stufe 5: Visuelle Selbstkritik (3D-Renderings vs. Zielbild, max. 2 Runden)
-  onStageUpdate?.('VISION_CRITIQUE', 'Ich vergleiche mein 3D-Modell gerade selbst mit dem Zielbild…');
+  onStageUpdate?.('VISION_CRITIQUE', 'Ich vergleiche mein 3D-Modell gerade selbst mit deinem freigegebenen Bild…');
   let renderedViews = renderViews ? renderViews(model) : [];
   let critique = await geminiClient.critiqueModelVisuals(brief, conceptImageUrl, renderedViews);
   let revisionCount = 1;
@@ -156,15 +181,10 @@ export async function runFredBuildPipeline(
     critique = await geminiClient.critiqueModelVisuals(brief, conceptImageUrl, renderedViews);
   }
 
-  // Stufe 6: Abschluss
   onStageUpdate?.('COMPLETE', `Fertig! „${model.name}“ steht bereit.`);
   const sourceNote =
-    brief.sources.length > 0 ? ` (inkl. ${brief.sources.length} recherchierter Web-Quellen)` : '';
-  const imgNote =
-    !conceptImageUrl && imageErrorNote
-      ? ` Hinweis zur Live-Bild-API: ${imageErrorNote}.`
-      : '';
-  const fredReply = `Oh, „${model.name}“ – was für ein großartiges Projekt! Ich habe dir das Modell (${model.parts.length.toLocaleString('de-DE')} Teile${sourceNote}) im echten Steinverbund direkt im 3D-Studio aufgebaut und auf 0 Kollisionen geprüft.${imgNote} Schreib einfach „ok“, dann starten wir gemeinsam mit Schritt 1!`;
+    brief.sources.length > 0 ? ` (inkl. ${brief.sources.length} Web-Quellen)` : '';
+  const fredReply = `Klasse! Dein Bauplan für „${model.name}“ (${model.parts.length.toLocaleString('de-DE')} Teile${sourceNote}, 0 Kollisionen) steht jetzt im 3D-Studio bereit. Du kannst direkt mit Schritt 1 starten oder oben rechts das PDF herunterladen!`;
 
   return {
     model,
@@ -176,4 +196,13 @@ export async function runFredBuildPipeline(
     revisionCount,
     fredReply,
   };
+}
+
+/** Kombinierter Durchlauf (Phase A + Phase B) für direkte Aufrufe & Tests */
+export async function runFredBuildPipeline(
+  userPrompt: string,
+  options: FredPipelineOptions,
+): Promise<FredPipelineResult> {
+  const draft = await prepareFredConceptPreview(userPrompt, options);
+  return buildApprovedFredPlan(draft, options);
 }

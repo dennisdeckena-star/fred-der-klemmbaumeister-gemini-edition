@@ -257,8 +257,8 @@ export function buildBrandenburgGateModel(targetParts = 3000): CadModel {
   const b = new MacroCadBuilder('bbt');
   const sandstone = 19; // Tan / Sandstein
   const lightStone = 15; // Helle Gesims-Akzente
-  const plaza = 71; // Lichtgrau Pariser Platz
-  const patina = 2; // Grün/Kupferpatina Quadriga
+  const plaza = 72; // Dunkelgrau Pariser Platz (wie Wange 6211 Sammler-Sockel)
+  const patina = 2; // Grün/Kupferpatina Quadriga & Torhaus-Dächer
 
   // 1. Pariser-Platz-Sockel (48 x 16 Noppen) mit schwarzem Display-Rahmen (Y = 0..16)
   for (let sz = -8; sz < 8; sz++) {
@@ -334,7 +334,7 @@ export function buildBrandenburgGateModel(targetParts = 3000): CadModel {
     }
     for (let sz = -4; sz <= 3; sz++) {
       b.fillSpanX(hx0, hx1, sz, 136, 'plate', lightStone, 'asm-wings', 12, false);
-      b.fillSpanX(hx0, hx1, sz, 144, 'tile', sandstone, 'asm-wings', 12, true);
+      b.fillSpanX(hx0, hx1, sz, 144, 'tile', patina, 'asm-wings', 12, true); // Patinagrüne Torhaus-Dächer!
     }
   }
 

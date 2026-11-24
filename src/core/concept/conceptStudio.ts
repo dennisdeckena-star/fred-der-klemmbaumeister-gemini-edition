@@ -114,11 +114,88 @@ export class ConceptStudioService {
   private readonly apiKey?: string;
   private readonly imagenModel: string;
   private readonly useOfflineAdapter: boolean;
+  private cachedImageModels: Array<{ name: string; method: 'predict' | 'generateContent' }> | null = null;
 
   constructor(options: { apiKey?: string; imagenModel?: string; useOfflineAdapter?: boolean } = {}) {
     this.apiKey = options.apiKey;
     this.imagenModel = options.imagenModel ?? DEFAULT_IMAGEN_MODEL;
     this.useOfflineAdapter = options.useOfflineAdapter || !options.apiKey;
+  }
+
+  /**
+   * Fragt einmalig (gecacht) über Google ModelService.ListModels ab, welche Bildmodelle
+   * für diesen API-Key tatsächlich freigeschaltet sind – vermeidet langsame 404-Fehlversuche!
+   */
+  private async discoverAvailableImageModels(): Promise<
+    Array<{ name: string; method: 'predict' | 'generateContent' }>
+  > {
+    if (this.cachedImageModels) return this.cachedImageModels;
+    if (!this.apiKey) return [];
+
+    const discovered: Array<{ name: string; method: 'predict' | 'generateContent' }> = [];
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?pageSize=100&key=${encodeURIComponent(this.apiKey)}`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as {
+          models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+        };
+        const rawModels = data.models ?? [];
+
+        // 1. Prefer fast & modern Imagen models (predict)
+        for (const m of rawModels) {
+          const shortName = (m.name ?? '').replace(/^models\//, '');
+          const methods = m.supportedGenerationMethods ?? [];
+          if (/imagen/i.test(shortName) && methods.includes('predict')) {
+            discovered.push({ name: shortName, method: 'predict' });
+          }
+        }
+        // Sort so fast / v4 models come first
+        discovered.sort((a, b) => {
+          const score = (n: string) =>
+            (n.includes('fast') ? 10 : 0) + (n.includes('4.0') ? 5 : n.includes('3.0') ? 3 : 0);
+          return score(b.name) - score(a.name);
+        });
+
+        // 2. Also include native Gemini image generation models (generateContent)
+        const geminiImg = rawModels
+          .map((m) => ({
+            name: (m.name ?? '').replace(/^models\//, ''),
+            methods: m.supportedGenerationMethods ?? [],
+          }))
+          .filter(
+            (m) =>
+              /image/i.test(m.name) &&
+              !/imagen/i.test(m.name) &&
+              m.methods.includes('generateContent'),
+          )
+          .sort((a, b) => {
+            const score = (n: string) =>
+              (n.includes('2.5-flash') ? 10 : n.includes('3-') ? 8 : 2) -
+              (n.includes('exp') ? 3 : 0);
+            return score(b.name) - score(a.name);
+          });
+
+        for (const gm of geminiImg) {
+          discovered.push({ name: gm.name, method: 'generateContent' });
+        }
+      }
+    } catch {
+      // Fall back to curated defaults if ListModels call fails
+    }
+
+    if (discovered.length === 0) {
+      discovered.push(
+        { name: 'imagen-4.0-fast-generate-001', method: 'predict' },
+        { name: 'imagen-4.0-generate-001', method: 'predict' },
+        { name: 'imagen-3.0-generate-002', method: 'predict' },
+        { name: 'gemini-2.5-flash-image', method: 'generateContent' },
+      );
+    }
+
+    this.cachedImageModels = discovered;
+    return discovered;
   }
 
   private async renderPreviewImage(
@@ -137,11 +214,11 @@ export class ConceptStudioService {
     };
 
     if (this.useOfflineAdapter || !this.apiKey) {
-      if (/titanic|titanik|schiff/i.test(prompt)) {
-        return {
-          imageDataUrl: './concepts/titanic-concept.png',
-          metadata,
-        };
+      if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(prompt)) {
+        return { imageDataUrl: './concepts/gorch-fock-concept.png', metadata };
+      }
+      if (/titanic|titanik/i.test(prompt)) {
+        return { imageDataUrl: './concepts/titanic-concept.png', metadata };
       }
       return {
         imageDataUrl: buildOfflineConceptSvgDataUrl(prompt, revision, detailLevel, metadata),
@@ -150,60 +227,57 @@ export class ConceptStudioService {
     }
 
     const ai = new GoogleGenAI({ apiKey: this.apiKey });
-    const styledPrompt = `Photorealistic 3/4 isometric studio product photograph of a detailed adult collector interlocking plastic brick (AFOL MOC, ${detailLevel} detail) model of: ${prompt}. Bright light-grey studio tabletop, glossy ABS plastic reflections, sharp visible studs and smooth tiles, no text, no watermark.`;
+    const styledPrompt = `Photorealistic 3/4 isometric studio product photograph of a high-detail adult collector interlocking plastic brick (AFOL MOC, ${detailLevel} detail) model of: ${prompt}. Realistic ABS plastic sheen, visible interlocking bricks, smooth tiles, slopes and fine details, bright studio tabletop, no text, no watermark.`;
 
-    // 1. Try Imagen models (imagen-3.0-generate-002 -> imagen-4.0-generate-001)
-    const imagenCandidates = Array.from(
-      new Set([this.imagenModel, 'imagen-3.0-generate-002', 'imagen-4.0-generate-001']),
-    );
-    let lastError: unknown = null;
+    const candidates = await this.discoverAvailableImageModels();
+    let lastErrorMessage = 'Kein Bildmodell für diesen API-Key verfügbar.';
 
-    for (const modelName of imagenCandidates) {
+    for (const candidate of candidates) {
       try {
-        const res = await ai.models.generateImages({
-          model: modelName,
-          prompt: styledPrompt,
-          config: { numberOfImages: 1, aspectRatio: '16:9' },
-        });
-        const b64 = res.generatedImages?.[0]?.image?.imageBytes;
-        if (b64) {
-          return {
-            imageDataUrl: `data:image/png;base64,${b64}`,
-            metadata: { ...metadata, generatorModel: modelName, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
-          };
-        }
-      } catch (err) {
-        lastError = err;
-      }
-    }
-
-    // 2. Fallback to Gemini Native Image Generation (works with standard Google AI Studio keys!)
-    const geminiImageModels = ['gemini-2.5-flash-image-preview', 'gemini-2.0-flash-exp-image-generation'];
-    for (const modelName of geminiImageModels) {
-      try {
-        const res = await ai.models.generateContent({
-          model: modelName,
-          contents: styledPrompt,
-          config: { responseModalities: ['IMAGE', 'TEXT'] },
-        });
-        const parts = res.candidates?.[0]?.content?.parts ?? [];
-        for (const p of parts) {
-          const inline = (p as { inlineData?: { mimeType?: string; data?: string } }).inlineData;
-          if (inline?.data) {
-            const mime = inline.mimeType || 'image/png';
+        if (candidate.method === 'predict') {
+          const res = await ai.models.generateImages({
+            model: candidate.name,
+            prompt: styledPrompt,
+            config: { numberOfImages: 1, aspectRatio: '16:9' },
+          });
+          const b64 = res.generatedImages?.[0]?.image?.imageBytes;
+          if (b64) {
             return {
-              imageDataUrl: `data:${mime};base64,${inline.data}`,
-              metadata: { ...metadata, generatorModel: modelName, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
+              imageDataUrl: `data:image/png;base64,${b64}`,
+              metadata: { ...metadata, generatorModel: candidate.name, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
             };
+          }
+        } else {
+          const res = await ai.models.generateContent({
+            model: candidate.name,
+            contents: styledPrompt,
+            config: { responseModalities: ['IMAGE', 'TEXT'] },
+          });
+          const parts = res.candidates?.[0]?.content?.parts ?? [];
+          for (const p of parts) {
+            const inline = (p as { inlineData?: { mimeType?: string; data?: string } }).inlineData;
+            if (inline?.data) {
+              const mime = inline.mimeType || 'image/png';
+              return {
+                imageDataUrl: `data:${mime};base64,${inline.data}`,
+                metadata: { ...metadata, generatorModel: candidate.name, adapterMode: 'LIVE_GOOGLE_IMAGEN' },
+              };
+            }
           }
         }
       } catch (err) {
-        lastError = err;
+        const raw = err instanceof Error ? err.message : String(err);
+        if (/billing|quota|limit|429|RESOURCE_EXHAUSTED/i.test(raw)) {
+          lastErrorMessage = 'Google Bild-API Kontingent/Billing für diesen Key nicht aktiv.';
+        } else if (/API_KEY_INVALID|401|403|PERMISSION_DENIED/i.test(raw)) {
+          lastErrorMessage = 'API-Key hat keine Berechtigung für die Google Bilderzeugung.';
+        } else {
+          lastErrorMessage = `Modell ${candidate.name} nicht verfügbar.`;
+        }
       }
     }
 
-    const reason = lastError instanceof Error ? lastError.message : 'Unbekannter API-Fehler';
-    throw new Error(`Google Bilderzeugung fehlgeschlagen: ${reason}`);
+    throw new Error(lastErrorMessage);
   }
 
   public async createConcept(
