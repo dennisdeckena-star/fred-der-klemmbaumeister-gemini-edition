@@ -1,4 +1,4 @@
-name: Build & Release Windows 11 x64 Installer
+name: Build & Release Windows 11 & Ubuntu x64 Installer
 
 on:
   push:
@@ -49,40 +49,11 @@ jobs:
           $lines | Out-File -FilePath release/SHA256SUMS.txt -Encoding utf8
           Get-Content release/SHA256SUMS.txt
 
-      - name: Installer als Workflow-Artifact hochladen
-        uses: actions/upload-artifact@v4
-        with:
-          name: fred-gemini-edition-win64-installer
-          path: |
-            release/*.exe
-            release/SHA256SUMS.txt
-            LICENSE
-            DATENSCHUTZ.md
-            LEGAL_NOTICE.md
-            SECURITY.md
-            COMPLIANCE_MATRIX.md
-            THIRD_PARTY_LICENSES.md
-
       - name: GitHub Release mit Windows-Installer & rechtlichen Zusätzen erstellen
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || 'v1.0.0' }}
           name: Fred, der Klemmbaumeister – Gemini Edition (${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || 'v1.0.0' }})
-          body: |
-            ## Fred, der Klemmbaumeister – Gemini Edition (Windows 11 x64)
-
-            ### Enthalten in diesem Release
-            - **Windows 11 x64 NSIS Installer** (`Fred - Gemini Edition Setup *.exe`)
-            - **SHA-256 Prüfsummen** (`SHA256SUMS.txt`)
-            - **Rechtliche Zusätze:** `LICENSE` (MIT), `DATENSCHUTZ.md` (DSGVO), `LEGAL_NOTICE.md` (Marken-Disclaimer & EU AI Act Art. 50), `SECURITY.md`, `COMPLIANCE_MATRIX.md`
-
-            ### Highlights
-            - 6-Stufen-Fred-Pro-Pipeline (Internet-Research via Google Search Grounding, Konzeptvorschau, Profi-Makro-CAD im versetzten Steinverbund, 20-LDU-Physik-Gate mit 0 Kollisionen, Multi-Angle-Vision-Selbstkritik, BlueBrixx-ergonomische Bauschritte max. 14 Teile/Schritt)
-            - Lokale 3D-Bühne (Three.js + LDraw) mit Explosionsansicht, Baugruppen-Isolation und A4-Querformat-PDF-Bauanleitung
-            - Multi-Marken-Bauteilkatalog (LEGO, GoBricks/Pantasy, Xingbao, BlueBrixx, CaDA, COBI + Webrick/GoBricks CSV-Export)
-            - Optionaler Zero-Key-Cloud-Proxy (`cloud-proxy/worker.ts`) oder eigener Google Gemini API-Key (geschützt via Windows Credential Manager)
-
-            > **Hinweis:** Unabhängiges Open-Source-Projekt ohne Verbindung zu LEGO®, COBI®, BlueBrixx® oder anderen Markeninhabern. Details siehe `LEGAL_NOTICE.md`.
           files: |
             release/*.exe
             release/SHA256SUMS.txt
@@ -92,3 +63,41 @@ jobs:
             SECURITY.md
             COMPLIANCE_MATRIX.md
             THIRD_PARTY_LICENSES.md
+
+  build-linux-installer:
+    name: Ubuntu / Linux x64 (.deb & AppImage) + Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Node.js 22 einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Build & vollständige Test-Suite
+        run: npm run build && npm test
+
+      - name: Ubuntu .deb & AppImage Installer bauen
+        run: npx electron-builder --linux deb AppImage --x64 --publish never
+
+      - name: SHA-256 Prüfsummen (Linux) erzeugen
+        run: |
+          cd release
+          sha256sum *.deb *.AppImage > SHA256SUMS-linux.txt
+          cat SHA256SUMS-linux.txt
+
+      - name: Linux-Installer an GitHub Release anhängen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || 'v1.0.0' }}
+          files: |
+            release/*.deb
+            release/*.AppImage
+            release/SHA256SUMS-linux.txt

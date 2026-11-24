@@ -1,0 +1,43 @@
+app-id: com.fred.GeminiEdition
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: fred-gemini-edition
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --talk-name=org.freedesktop.secrets
+  - --filesystem=xdg-documents:rw
+  - --filesystem=xdg-download:rw
+modules:
+  - name: fred-gemini-edition
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/main /app/bin /app/share/applications /app/share/icons/hicolor/256x256/apps
+      - cp -r linux-unpacked/* /app/main/
+      - install -Dm644 assets/fred-icon.png /app/share/icons/hicolor/256x256/apps/com.fred.GeminiEdition.png
+      - |
+        cat << 'EOF' > /app/bin/fred-gemini-edition
+        #!/bin/sh
+        exec zypak-wrapper /app/main/fred-gemini-edition "$@"
+        EOF
+      - chmod +x /app/bin/fred-gemini-edition
+      - |
+        cat << 'EOF' > /app/share/applications/com.fred.GeminiEdition.desktop
+        [Desktop Entry]
+        Name=Fred - Gemini Edition
+        Comment=Fred, der Klemmbaumeister – 3D-Klemmbaustein-CAD & Bauanleitungen
+        Exec=fred-gemini-edition %U
+        Icon=com.fred.GeminiEdition
+        Type=Application
+        Categories=Graphics;Education;Engineering;
+        EOF
+    sources:
+      - type: dir
+        path: ../../release
