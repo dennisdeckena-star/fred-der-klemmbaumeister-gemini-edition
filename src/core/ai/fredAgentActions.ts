@@ -115,7 +115,8 @@ export function resolveFredAgentTurn(
     };
   }
 
-  // 2. Pure Greeting ONLY (must NOT swallow "hallo fred ich würde gerne die Gorch Fock bauen"!)
+  // 2. Pure Greeting OR General Question ("was kannst du für mich tun?", "hilfe", "welche bauteile hast du?")
+  // NEVER build a 3D brick block when the user is just asking a question!
   if (/^(hallo|hi|hey|moin|servus|guten\s+(morgen|tag|abend))(\s+fred)?[!.,\s]*$/i.test(raw)) {
     return {
       handledDirectly: true,
@@ -123,18 +124,31 @@ export function resolveFredAgentTurn(
       replyText: 'Hallo! Schön, dass du da bist – was wollen wir heute Tolles bauen?',
     };
   }
+  const hasBuildVerb = /\b(bau|baue|bauen|erstell|konstruier|mach\s+mir|vorschaubild|teile|maßstab|1\s*:\s*\d+)\b/i.test(lower);
+  if (
+    !hasBuildVerb &&
+    (/was\s+kannst\s+du|wer\s+bist\s+du|wie\s+funktionier|hilfe|was\s+machst\s+du|welche\s+(bauteile|teile|steine)\s+hast\s+du/i.test(lower) ||
+      (raw.endsWith('?') && raw.length < 80))
+  ) {
+    return {
+      handledDirectly: true,
+      nextPendingFollowUp: null,
+      replyText:
+        'Ich bin Fred, dein Klemmbaustein-Ingenieur! Nenn mir einfach dein Wunschmotiv (z. B. „Krusenstern 4-Master“, „Schloss Neuschwanstein“ oder „Brandenburger Tor“) – ich recherchiere die Maße, erzeuge per Nano Banana dein fotorealistisches Vorschaubild und baue nach deinem grünen Daumen den 3D-Bauplan inkl. PDF!',
+    };
+  }
 
-  // 3. Gorch Fock / Dreimastbark -> IMMEDIATELY show photorealistic preview AND start building 3D model!
-  if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(lower)) {
+  // 3. Gorch Fock / Großsegler (Krusenstern, Fünfmaster, Viermaster, Dreimastbark) -> Pipeline!
+  if (/gorch\s*fock|krusenstern|preußen|preussen|fünf\s*master|fuenf\s*master|vier\s*master|dreimastbark|segelschulschiff|großsegler|grosssegler/i.test(lower)) {
     const scaleMatch = raw.match(/1\s*:\s*(\d{2,4})/);
     const scaleLabel = scaleMatch ? `1:${scaleMatch[1]}` : '1:300';
     return {
       handledDirectly: true,
       imageUrl: './concepts/gorch-fock-concept.png',
-      imageBadge: `Konzeptvorschau Gorch Fock (${scaleLabel}) • EU AI Act Art. 50`,
+      imageBadge: `Nano Banana Vorschau (${scaleLabel}) • EU AI Act Art. 50`,
       action: { type: 'BUILD_GORCH_FOCK', scaleLabel },
       nextPendingFollowUp: { type: 'GO_TO_STEP', step: 1 },
-      replyText: `Oh, die Gorch Fock in ${scaleLabel} – was für ein wunderschönes Projekt! Ich habe dir direkt das Vorschaubild erstellt und sie schon im 3D-Studio für dich aufgebaut. Schreib einfach „ok“, dann starten wir gemeinsam mit Schritt 1!`,
+      replyText: `Oh, ein Großsegler (${scaleLabel}) – was für ein wunderschönes Projekt! Ich starte sofort Research & Nano Banana Vorschau für dich.`,
     };
   }
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileDown, Heart, Star } from 'lucide-react';
+import { FileDown, Heart, Star, Trash2 } from 'lucide-react';
 import { CadModel } from '../../core/cad';
 
 export interface SavedPdfMeta {
@@ -18,6 +18,7 @@ export interface BlueprintSidebarProps {
   savedPdfs: Record<string, SavedPdfMeta>;
   onSelectModel: (modelId: string) => void;
   onToggleFavorite: (modelId: string) => void;
+  onDeleteModel: (modelId: string) => void;
   onDownloadSavedPdf: (modelId: string) => void;
 }
 
@@ -87,6 +88,7 @@ export function BlueprintSidebar({
   savedPdfs,
   onSelectModel,
   onToggleFavorite,
+  onDeleteModel,
   onDownloadSavedPdf,
 }: BlueprintSidebarProps): React.ReactElement {
   return (
@@ -113,21 +115,36 @@ export function BlueprintSidebar({
             >
               <div className="blueprint-card-top">
                 <Star size={16} className="star-icon" fill="#facc15" color="#eab308" />
-                <button
-                  type="button"
-                  className="fav-btn"
-                  aria-label={`${m.name} als Favorit umschalten`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleFavorite(m.id);
-                  }}
-                >
-                  <Heart
-                    size={16}
-                    fill={isFav ? '#ef4444' : '#cbd5e1'}
-                    color={isFav ? '#ef4444' : '#94a3b8'}
-                  />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button
+                    type="button"
+                    className="fav-btn"
+                    aria-label={`${m.name} als Favorit umschalten`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleFavorite(m.id);
+                    }}
+                  >
+                    <Heart
+                      size={16}
+                      fill={isFav ? '#ef4444' : '#cbd5e1'}
+                      color={isFav ? '#ef4444' : '#94a3b8'}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className="fav-btn"
+                    title="Bauplan aus Liste löschen"
+                    aria-label={`${m.name} löschen`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteModel(m.id);
+                    }}
+                    style={{ color: '#94a3b8' }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
               {typeof m.metadata?.thumbnailUrl === 'string' && m.metadata.thumbnailUrl ? (
                 <img

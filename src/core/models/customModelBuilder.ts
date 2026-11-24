@@ -421,7 +421,7 @@ export function buildModelFromResearchBrief(
   if (/brandeb\w*\s*tor|brandenb\w*\s*tor|brandenburgertor/i.test(brief.title)) {
     return buildBrandenburgGateModel(3000);
   }
-  if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(brief.title)) {
+  if (/gorch\s*fock|krusenstern|preußen|preussen|fünf\s*master|fuenf\s*master|vier\s*master|dreimastbark|segelschulschiff|großsegler|grosssegler/i.test(brief.title) || brief.category === 'tall_ship') {
     return buildGorchFockModel(brief.scaleLabel, adjustments);
   }
 
@@ -535,41 +535,33 @@ export function buildModelFromResearchBrief(
     });
   }
 
-  // Universelles AFOL-Display-Modell im versetzten Steinverbund + Display-Sockel
-  for (let sz = -5; sz < 5; sz++) {
-    b.fillSpanX(-8, 7, sz, 0, 'plate', 72, 'asm-base', 1, sz % 2 === 0);
+  // Moderne Skelett-und-Hüllen-Konstruktion (NIEMALS ein grauer Pyramidenklotz!):
+  // 1. Querverknüpfte Display-Basis + 2. Technic-Skelett (32524.dat) + 3. SNOT-/Slope-/Kachel-Außenhülle!
+  b.addConnectingFloorPlate(-8, 7, -5, 4, 0, 72, 'asm-base', 1, 0);
+  b.addConnectingFloorPlate(-7, 6, -4, 3, 8, 71, 'asm-base', 2, 0);
+  b.addTechnicSpine(-7, 6, 0, 16, 'asm-core', 3);
+  for (let sz = -3; sz <= 2; sz++) {
+    if (sz === 0) continue;
+    b.fillSpanX(-6, 5, sz, 16, 'brick', primary, 'asm-core', 4, sz % 2 === 0);
   }
-  b.addTechnicSpine(-6, 5, 0, 8, 'asm-core', 2);
-  for (let layer = 0; layer < 4; layer++) {
-    const y = 16 + layer * 24;
-    const rx = Math.max(3, 7 - layer);
-    const rz = Math.max(2, 4 - Math.floor(layer / 2));
-    for (let sz = -rz; sz < rz; sz++) {
-      b.fillSpanX(
-        -rx,
-        rx - 1,
-        sz,
-        y,
-        'brick',
-        layer % 2 === 0 ? primary : secondary,
-        'asm-core',
-        3 + layer,
-        layer % 2 === 1,
-      );
-    }
+  b.addConnectingFloorPlate(-6, 5, -3, 2, 40, secondary, 'asm-finish', 5, 1);
+  // Moderne glatte Kachel- & Curved-Slope-Außenhülle (11477.dat, 50950.dat, 87079.dat, 87087.dat)
+  for (let sx = -6; sx <= 4; sx += 2) {
+    b.place('11477.dat', 2, 1, 2, sx, -3, 48, accent, 'asm-finish', 6);
+    b.place('11477.dat', 2, 1, 2, sx, 2, 48, accent, 'asm-finish', 6);
   }
-  for (let sz = -2; sz < 2; sz++) {
-    b.fillSpanX(-3, 2, sz, 112, 'tile', accent, 'asm-finish', 8, false);
+  for (let sz = -2; sz <= 1; sz++) {
+    b.fillSpanX(-5, 4, sz, 48, 'tile', primary, 'asm-finish', 7, sz % 2 === 0);
   }
 
   return b.toCadModel({
     id: `model-custom-${Date.now().toString(36)}`,
-    name: brief.title,
-    description: `${brief.realDimensionsNote} Konstruiert von Fred im 20-LDU-Noppenraster.`,
+    name: cleanModelTitle(brief.title),
+    description: `${brief.realDimensionsNote} Konstruiert mit Technic-Skelett und moderner Kachel-/Curved-Slope-Hülle.`,
     assemblies: [
-      { id: 'asm-base', name: '1. Display-Sockel', parentId: null, stepOrder: 1 },
-      { id: 'asm-core', name: '2. Technic-Kern & Steinverbund', parentId: null, stepOrder: 2 },
-      { id: 'asm-finish', name: '3. Gefliestes Finish & Details', parentId: null, stepOrder: 3 },
+      { id: 'asm-base', name: '1. Querverknüpfter Display-Sockel', parentId: null, stepOrder: 1 },
+      { id: 'asm-core', name: '2. Tragendes Technic-Skelett', parentId: null, stepOrder: 2 },
+      { id: 'asm-finish', name: '3. Moderne Kachel- & Curved-Slope-Hülle', parentId: null, stepOrder: 3 },
     ],
   });
 }

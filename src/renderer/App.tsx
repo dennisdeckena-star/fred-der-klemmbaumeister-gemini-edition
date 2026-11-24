@@ -26,6 +26,19 @@ import { ConceptApprovalModal } from './components/ConceptApprovalModal';
 import { InspectorModal } from './components/InspectorModal';
 
 const PROGRESS_STORAGE_KEY = 'fred_gemini_build_progress_v1';
+const MEMORY_MD_STORAGE_KEY = 'fred_memory_md_v1';
+
+function appendFredMemoryNote(note: string): void {
+  try {
+    const existing =
+      localStorage.getItem(MEMORY_MD_STORAGE_KEY) ??
+      '# Fred Memory.md\n- Bevorzuge moderne Technic-Skelette mit glatter Kachel-/Slope-Hülle (keine Klötze).\n';
+    const entry = `- [${new Date().toISOString().slice(0, 16)}] ${note}\n`;
+    localStorage.setItem(MEMORY_MD_STORAGE_KEY, (existing + entry).slice(-8000));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 interface SavedProgress {
   activeModelId?: string;
@@ -161,6 +174,23 @@ export function App(): React.ReactElement {
     setActiveModelId(id);
     setIsolatedAssemblyId(null);
     setExploded(false);
+  };
+
+  const handleDeleteModel = (id: string) => {
+    setModels((prev) => {
+      if (prev.length <= 1) {
+        setStatusBanner('Mindestens ein Bauplan bleibt als Startmodell erhalten.');
+        return prev;
+      }
+      const remaining = prev.filter((m) => m.id !== id);
+      if (activeModelId === id && remaining[0]) {
+        setActiveModelId(remaining[0].id);
+        setIsolatedAssemblyId(null);
+        setExploded(false);
+      }
+      setStatusBanner('Bauplan aus deiner Bibliothek gelöscht.');
+      return remaining;
+    });
   };
 
   const handleExportPdf = async (targetModel: CadModel = activeModel) => {
@@ -444,6 +474,7 @@ export function App(): React.ReactElement {
           onToggleFavorite={(id) =>
             setFavorites((prev) => ({ ...prev, [id]: !prev[id] }))
           }
+          onDeleteModel={handleDeleteModel}
           onDownloadSavedPdf={handleDownloadSavedPdf}
         />
 
@@ -597,6 +628,9 @@ export function App(): React.ReactElement {
         imageErrorNote={pendingConceptDraft?.imageErrorNote}
         trace={pendingConceptDraft?.trace}
         onReject={() => {
+          if (pendingConceptDraft) {
+            appendFredMemoryNote(`Nutzer lehnte Vorschau ab für „${pendingConceptDraft.brief.title}“ -> verfeinern`);
+          }
           setPendingConceptDraft(null);
           setAwaitingRefinement(true);
           setMessages((prev) => [
@@ -649,6 +683,9 @@ export function App(): React.ReactElement {
             setIsolatedAssemblyId(null);
             setExploded(false);
             setPendingFollowUp({ type: 'GO_TO_STEP', step: 1 });
+            appendFredMemoryNote(
+              `Freigegeben & gebaut: „${result.model.name}“ (${result.model.parts.length} Teile, 0 Kollisionen)`,
+            );
             setStatusBanner(
               `${result.model.name} (${result.model.parts.length.toLocaleString('de-DE')} Teile, 0 Kollisionen) freigegeben & gebaut.`,
             );

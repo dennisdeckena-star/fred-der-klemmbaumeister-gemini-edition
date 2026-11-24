@@ -61,4 +61,22 @@ describe('Fred Chat-Agent: Super lieb, motivierend & fängt sofort mit Bild + 3D
       expect(res.action).not.toEqual({ type: 'SELECT_MODEL', modelId: 'model-castle' });
     }
   });
+
+  it('baut auf eine normale Frage („hallo Fred was kannst du für mich tun?“) KEIN Klotz-Modell und erkennt „fünf master krusenstern“ als Großsegler', async () => {
+    const { listAllParts } = await import('../src/core/ldraw');
+    const q = resolveFredAgentTurn('hallo Fred was kannst du für mich tun?', baseCtx);
+    expect(q.handledDirectly).toBe(true);
+    expect(q.action).toBeUndefined();
+
+    const ship = resolveFredAgentTurn('einen fünf master krusenstern 6000 teile', baseCtx);
+    expect(ship.action?.type).toBe('BUILD_GORCH_FOCK');
+
+    // Erweiterter moderner AFOL-Katalog: > 100 lizenzfreie LDraw-Bauteile inkl. Clips, Flügel-Slopes & Kacheln!
+    const parts = listAllParts();
+    expect(parts.length).toBeGreaterThanOrEqual(100);
+    expect(parts.some((p) => p.partId === '4085d.dat')).toBe(true); // Clip
+    expect(parts.some((p) => p.partId === '54383.dat')).toBe(true); // Flügel-Slope
+    expect(parts.some((p) => p.partId === '87079.dat')).toBe(true); // Kachel 2x4
+    expect(parts.some((p) => p.partId === '64178.dat')).toBe(true); // Technic-Rahmen 5x11
+  });
 });

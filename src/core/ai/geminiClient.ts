@@ -332,29 +332,32 @@ export class FredGeminiClient {
       };
     }
 
-    if (/gorch\s*fock|dreimastbark|segelschulschiff/i.test(lower)) {
+    if (/gorch\s*fock|krusenstern|preußen|preussen|fünf\s*master|fuenf\s*master|vier\s*master|dreimastbark|segelschulschiff|großsegler|grosssegler/i.test(lower)) {
+      const isKrusenstern = /krusenstern|fünf\s*master|fuenf\s*master|vier\s*master/i.test(lower);
       return {
-        title: `Gorch Fock (${scaleLabel})`,
+        title: isKrusenstern ? `Großsegler Krusenstern (${scaleLabel})` : `Gorch Fock (${scaleLabel})`,
         scaleLabel,
         category: 'tall_ship',
-        realDimensionsNote: 'Original: 89,3 m Länge ü. A., 12,0 m Breite, 45,3 m Masthöhe; Dreimastbark (Fock- & Großmast rahgetakelt, Besanmast schratgetakelt).',
+        realDimensionsNote: isKrusenstern
+          ? 'Original: 114,5 m Länge ü. A., 14,0 m Breite, 4-5 Masten mit voller Rah- & Schrat-Takelage, schwarzer Rumpf mit weißem Pfortenband, Display-Ständer.'
+          : 'Original: 89,3 m Länge ü. A., 12,0 m Breite, 45,3 m Masthöhe; Dreimastbark (Fock- & Großmast rahgetakelt, Besanmast schratgetakelt).',
         targetStudsLength: 56,
         targetStudsWidth: 8,
         targetStudsHeight: 28,
-        primaryColors: [15, 320, 19],
+        primaryColors: isKrusenstern ? [0, 320, 15, 19] : [15, 320, 19],
         accentColors: [0, 272, 14, 4],
         signatureFeatures: [
-          'Dunkelroter Unterwasserrumpf mit Ruder und schwarzem Display-Ständer',
-          'Weißer Überwasserrumpf mit dunklen Bullaugen und langem Bugspriet',
+          'Dunkelroter Unterwasserrumpf mit Technic-Skelett-Kiel & schwarzem Display-Ständer',
+          'Geschwungene Hüllenverkleidung mit Kacheln, Bullaugen und langem Bugspriet',
           'Gefliestes Holzdeck (Tan) mit weißen Deckshäusern und Rettungsbooten',
-          '3 Masten mit gestaffelten weißen Rahsegeln, Besansegel und Deutschlandflagge',
+          'Mehrere schlanke Masten mit gestaffelten weißen Rahsegeln, Clips & Flaggen',
         ],
         assemblies: [
           '1. Display-Ständer & Technic-Kiel',
           '2. Dunkelroter Unterwasserrumpf',
-          '3. Weißer Rumpf, Bullaugen & Bugspriet',
+          '3. Rumpf-Hülle, Bullaugen & Bugspriet',
           '4. Gefliestes Holzdeck & Deckshäuser',
-          '5. Drei Masten, Rahsegel & Flaggen',
+          '5. Masten, Rahsegel & Flaggen',
         ],
         sources: [],
         adapterMode: this.adapterMode,
